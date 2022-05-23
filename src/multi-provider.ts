@@ -1,4 +1,5 @@
 import { Provider as MulticallProvider } from './provider';
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
 import { ContractCall } from 'ethers-multicall';
 import { v4 as uuid } from 'uuid';
 import {
@@ -12,12 +13,12 @@ import {
   EthersCall,
   EthersCallError,
 } from './types';
-import { getProviderConfig, silentLogger, timeout } from './helpers';
+import { getProvidersWithConfig, silentLogger, timeout } from './helpers';
 import EventEmitter from 'events';
 
 export class MultiProvider {
   private _providers: MulticallProviderWithConf[];
-  private _mpsInUse: MulticallProviderWithConf[]; // multiProviders in use
+  private _mpsInUse: MulticallProviderWithConf[] = []; // multiProviders in use
   private _emitter: EventEmitter;
   private pendingWithError: ContractCallWithId[][] = [];
   private pending: ContractCallWithId[] = [];
@@ -29,33 +30,21 @@ export class MultiProvider {
   private _logger: Logger;
 
   constructor(
-    providersWithConf: EthersProviderWithConf[],
+    providersWithConf: (EthersProvider | EthersProviderWithConf)[],
     chainId: number,
-    logger: Logger = /* console.log, // */ silentLogger,
+    logger: Logger = silentLogger,
   ) {
     this._logger = logger;
-    this._providers = [];
-    providersWithConf.forEach((providerWithConf) => {
-      const multiProviderWithConf = {
-        provider: new MulticallProvider(providerWithConf.provider, chainId),
-        conf: getProviderConfig(providerWithConf.conf),
-      };
-      this._providers.push(multiProviderWithConf);
-    });
-    this._mpsInUse = [];
+    this._providers = getProvidersWithConfig(providersWithConf, chainId);
     this._emitter = new EventEmitter();
   }
 
-  public async all /* <T extends any[] = any[]> */(
-    calls: (ContractCall | EthersCall)[],
-  ) {
+  public async all(calls: (ContractCall | EthersCall)[]) {
     const ids = await this.queueCallsAndWaitResolve(calls);
 
     return Promise.all(ids.map((id) => this.getResponse(id)));
   }
-  public async allSettled /* <T extends any[] = any[]> */(
-    calls: ContractCall[],
-  ) {
+  public async allSettled(calls: ContractCall[]) {
     const ids = await this.queueCallsAndWaitResolve(calls);
 
     return Promise.allSettled(ids.map((id) => this.getResponse(id)));

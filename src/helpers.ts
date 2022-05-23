@@ -1,4 +1,11 @@
-import { OptionalConf, ProviderConf } from './types';
+import {
+  OptionalConf,
+  ProviderConf,
+  MulticallProviderWithConf,
+  EthersProviderWithConf,
+} from './types';
+import { Provider as MulticallProvider } from './provider';
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
 
 export const isError = (err: unknown): err is Error => err instanceof Error;
 
@@ -12,12 +19,33 @@ export function logError(where: string, error: any, context?: any) {
   );
 }
 
+const defaultConfig = {
+  batchSize: 10,
+  callsDelay: 2000,
+};
+
 export function getProviderConfig(conf: OptionalConf): ProviderConf {
-  const providerConf: ProviderConf = {
-    batchSize: conf.batchSize ?? 10,
-    callsDelay: conf.callsDelay ?? 2000,
-  };
-  return providerConf;
+  return Object.assign(defaultConfig, conf);
+}
+export function getProvidersWithConfig(
+  providersWithConf: (EthersProvider | EthersProviderWithConf)[],
+  chainId: number,
+): MulticallProviderWithConf[] {
+  const multiprovidersWithConf: MulticallProviderWithConf[] = [];
+  providersWithConf.forEach((providerWithConf) => {
+    if (providerWithConf instanceof EthersProvider) {
+      multiprovidersWithConf.push({
+        provider: new MulticallProvider(providerWithConf, chainId),
+        conf: defaultConfig,
+      });
+    } else {
+      multiprovidersWithConf.push({
+        provider: new MulticallProvider(providerWithConf.provider, chainId),
+        conf: Object.assign(defaultConfig, providerWithConf.conf),
+      });
+    }
+  });
+  return multiprovidersWithConf;
 }
 
 export function timeout(ms: number) {
