@@ -1,0 +1,47 @@
+{
+	"name": "ethers-multiprovider",
+	"version": "0.0.1",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/jest": "^27.5.1",
+		"@types/node": "~14.14.45",
+		"@types/uuid": "^8.3.4",
+		"jest": "^27.5.1",
+		"prettier": "^2.6.2",
+		"ts-jest": "^27.1.4",
+		"ts-node": "^10.7.0",
+		"typescript": "^4.6.3"
+	},
+	"scripts": {
+		"test": "jest --coverage",
+		"test:watch": "jest --watch",
+		"lint": "tslint -c tslint.json '{src,test}/**/*.ts' --fix",
+		"prepublishOnly": "yarn build && yarn test && yarn lint",
+		"start": "node lib/main.js",
+		"build": "npm run clean && npm run compile",
+		"clean": "rm -rf out || rmdir out /s /q",
+		"compile": "tsc -p ./"
+	},
+	"main": "lib/index.js",
+	"types": "dist/index.d.ts",
+	"files": [
+		"/lib"
+	],
+	"dependencies": {
+		"ethers": "^5.6.2",
+		"ethers-multicall": "^0.2.2",
+		"p-event": "^5.0.1",
+		"uuid": "^8.3.2"
+	},
+	"directories": {
+		"test": "test"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/MisterMard/ethers-multiprovider.git"
+	},
+	"bugs": {
+		"url": "https://github.com/MisterMard/ethers-multiprovider/issues"
+	},
+	"homepage": "https://github.com/MisterMard/ethers-multiprovider#readme"
+}
