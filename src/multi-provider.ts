@@ -1,6 +1,6 @@
-import { Provider as MulticallProvider } from "./provider";
-import { ContractCall } from "ethers-multicall";
-import { v4 as uuid } from "uuid";
+import { Provider as MulticallProvider } from './provider';
+import { ContractCall } from 'ethers-multicall';
+import { v4 as uuid } from 'uuid';
 import {
   ContractCallError,
   ResolvedCalls,
@@ -11,9 +11,9 @@ import {
   EthersProviderWithConf,
   EthersCall,
   EthersCallError,
-} from "./types";
-import { getProviderConfig, timeout } from "./helpers";
-import EventEmitter from "events";
+} from './types';
+import { getProviderConfig, silentLogger, timeout } from './helpers';
+import EventEmitter from 'events';
 
 export class MultiProvider {
   private _providers: MulticallProviderWithConf[];
@@ -31,7 +31,7 @@ export class MultiProvider {
   constructor(
     providersWithConf: EthersProviderWithConf[],
     chainId: number,
-    logger: Logger = console.log, //silentLogger,
+    logger: Logger = /* console.log, // */ silentLogger,
   ) {
     this._logger = logger;
     this._providers = [];
@@ -79,9 +79,9 @@ export class MultiProvider {
     const promises = calls.map((call) => {
       const id = uuid();
       if (isEthersCall(call)) {
-        this.pendingEthers.push({ id: id, call });
+        this.pendingEthers.push({ id, call });
       } else {
-        this.pending.push({ id: id, contractCall: call });
+        this.pending.push({ id, contractCall: call });
       }
       ids.push(id);
       return this.awaitEventOnce(id);
@@ -165,7 +165,7 @@ export class MultiProvider {
     }
 
     // put excess calls back to pending
-    erroredCalls.length && this.pendingWithError.push(erroredCalls);
+    if (erroredCalls.length) this.pendingWithError.push(erroredCalls);
 
     this.executeWrapper(provider, callsForCurrentProvider);
   }
@@ -179,7 +179,7 @@ export class MultiProvider {
       contractCalls.forEach((c) => this._emitter.emit(c.id));
     } catch (error: any) {
       // CALL_EXCEPTION = a failed call in the batch or a dead provider
-      if (error.code === "CALL_EXCEPTION") {
+      if (error.code === 'CALL_EXCEPTION') {
         if (contractCalls.length === 1) {
           this.rejectedMulticalls[contractCalls[0].id] =
             contractCalls[0].contractCall;
@@ -222,7 +222,7 @@ export class MultiProvider {
 
   private getRandomProvider(): MulticallProviderWithConf {
     const provider =
-      this._providers[~~(Math.random() * this._providers.length)];
+      this._providers[Math.floor(Math.random() * this._providers.length)];
     if (this._mpsInUse.includes(provider)) return this.getRandomProvider();
     this._mpsInUse.push(provider);
     return provider;
@@ -233,7 +233,7 @@ export class MultiProvider {
     const index = this._mpsInUse.findIndex((x) => x === prov);
     this._mpsInUse.splice(index, 1);
     await timeout(prov.conf.callsDelay);
-    this._emitter.emit("provider freed");
+    this._emitter.emit('provider freed');
     this.run();
   }
 
@@ -244,8 +244,7 @@ export class MultiProvider {
   }
 
   public async stop() {
-    for (let i = 0; i < this._providers.length; i++) {
-      const provider = this._providers[i];
+    for (const provider of this._providers) {
       if (provider.provider.destroy) await provider.provider.destroy();
     }
   }
@@ -254,5 +253,5 @@ export class MultiProvider {
 }
 
 function isEthersCall(object: any): object is EthersCall {
-  return "type" in object;
+  return 'type' in object;
 }

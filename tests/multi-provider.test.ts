@@ -1,9 +1,9 @@
-import { BigNumber, ethers } from "ethers";
-import { Contract, MultiProvider, EthersProviderWithConf } from "../src/index";
-import c from "./constants.json";
-import jarAbi from "./jar.json";
+import { BigNumber, ethers } from 'ethers';
+import { Contract, MultiProvider, EthersProviderWithConf } from '../src/index';
+import c from './constants.json';
+import jarAbi from './jar.json';
 
-describe("Testing ethers-calls-mgr", () => {
+describe('Testing ethers-calls-mgr', () => {
   let multiProvider: MultiProvider;
   beforeAll(async () => {
     const ethersProvidersWithConf: EthersProviderWithConf[] = [];
@@ -23,10 +23,10 @@ describe("Testing ethers-calls-mgr", () => {
   });
   afterAll(async () => {
     await multiProvider.stop();
-    console.log("done");
+    console.log('done');
   });
 
-  it("Handles multi-calls properly", async () => {
+  it('Handles multi-calls properly', async () => {
     const err = [];
     try {
       const contract = new Contract(c.arb.usdcAddr, jarAbi);
@@ -41,7 +41,7 @@ describe("Testing ethers-calls-mgr", () => {
     expect(err.length).toBe(0);
   }, 10000);
 
-  it("Handles multi-calls with errors", async () => {
+  it('Handles multi-calls with errors', async () => {
     const err = [];
     try {
       const contract = new Contract(c.arb.usdcAddr, jarAbi.concat(c.failAbi));
@@ -51,14 +51,14 @@ describe("Testing ethers-calls-mgr", () => {
       );
       const results = await multiProvider.allSettled(mCalls);
 
-      expect(results.filter((r) => r.status === "rejected").length).toBe(1);
+      expect(results.filter((r) => r.status === 'rejected').length).toBe(1);
     } catch (error) {
       err.push(error);
     }
     expect(err.length).toBe(0);
   }, 20000);
 
-  it("Handles queryFilter calls properly", async () => {
+  it('Handles queryFilter calls properly', async () => {
     const err = [];
     try {
       const contract = new Contract(c.arb.usdcAddr, jarAbi);
@@ -74,7 +74,7 @@ describe("Testing ethers-calls-mgr", () => {
     }
   }, 10000);
 
-  it("Catches problematic providers", async () => {
+  it('Catches problematic providers', async () => {
     // @TODO: add an async method to supplied providers' connectivity
   });
 });
