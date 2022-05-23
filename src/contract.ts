@@ -1,30 +1,37 @@
-import { Fragment, Interface, JsonFragment } from '@ethersproject/abi';
-import { Contract as MultiContract } from 'ethers-multicall';
-import { BlockTag } from '@ethersproject/abstract-provider';
+import { Fragment, Interface, JsonFragment } from "@ethersproject/abi";
+import { Contract as MultiContract } from "ethers-multicall";
+import { BlockTag } from "@ethersproject/abstract-provider";
 import {
   Event,
   EventFilter,
   Contract as EthersContract,
-} from '@ethersproject/contracts';
-import { EventFragment } from 'ethers/lib/utils';
-import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
-import { EthersCall, QueryFilterCall } from './types';
+} from "@ethersproject/contracts";
+import { EventFragment } from "ethers/lib/utils";
+import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
+import { MultiProvider } from "./multi-provider";
+import { EthersCall, QueryFilterCall } from "./types";
 
 export class Contract extends MultiContract {
   private _filters: { [name: string]: (...args: Array<any>) => EventFilter } =
     {};
   private _eventFragments: EventFragment[];
   private _interface: Interface;
+  private _multiProvider: MultiProvider;
 
   get filters() {
     return this._filters;
   }
 
-  constructor(address: string, abi: JsonFragment[] | string[] | Fragment[]) {
+  constructor(
+    address: string,
+    abi: JsonFragment[] | string[] | Fragment[],
+    multiProvider?: MultiProvider,
+  ) {
     super(address, abi);
+    this._multiProvider = multiProvider;
 
     this._eventFragments = toFragment(abi)
-      .filter((x: { type: string }) => x.type === 'event')
+      .filter((x: { type: string }) => x.type === "event")
       .map((x) => EventFragment.from(x));
 
     // Save the contract interface
@@ -53,7 +60,7 @@ export class Contract extends MultiContract {
           defineReadOnly(this.filters, name, this.filters[filters[0]]);
         } else {
           console.warn(
-            `Duplicate definition of ${name} (${filters.join(', ')})`,
+            `Duplicate definition of ${name} (${filters.join(", ")})`,
           );
         }
       });
@@ -64,17 +71,19 @@ export class Contract extends MultiContract {
     event: EventFilter,
     fromBlockOrBlockhash?: BlockTag | string,
     toBlock?: BlockTag,
-  ): EthersCall {
-    return {
-      type: 'QUERY_FILTER',
+  ) {
+    if (!this._multiProvider) throw "No MultiProvider were supplied!";
+    const ethersCall: EthersCall = {
+      type: "QUERY_FILTER",
       params: {
         contract: this,
         event,
         params: [fromBlockOrBlockhash, toBlock],
       },
     };
+    return this._multiProvider.all([ethersCall]);
   }
-  async _queryFilter(
+  private async _queryFilter(
     params: QueryFilterCall,
     provider: EthersProvider,
   ): Promise<Array<Event>> {
@@ -92,7 +101,7 @@ export class Contract extends MultiContract {
 
   executeEthersCall(ethersCall: EthersCall, provider: EthersProvider) {
     switch (ethersCall.type) {
-      case 'QUERY_FILTER':
+      case "QUERY_FILTER":
         return this._queryFilter(ethersCall.params, provider);
 
       default:
