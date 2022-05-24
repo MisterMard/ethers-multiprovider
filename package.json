@@ -18,13 +18,12 @@
 		"test:watch": "jest --watch",
 		"lint": "tslint -c tslint.json '{src,tests}/**/*.ts' --fix",
 		"prepublishOnly": "yarn build && yarn test && yarn lint",
-		"start": "node lib/main.js",
 		"build": "npm run clean && npm run compile",
 		"clean": "rm -rf out || rmdir out /s /q",
-		"compile": "tsc -p ./"
+		"compile": "tsc -p ."
 	},
 	"main": "lib/index.js",
-	"types": "dist/index.d.ts",
+	"types": "lib/index.d.ts",
 	"files": [
 		"/lib"
 	],
@@ -32,9 +31,6 @@
 		"ethers": "^5.6.2",
 		"ethers-multicall": "^0.2.2",
 		"uuid": "^8.3.2"
-	},
-	"directories": {
-		"test": "test"
 	},
 	"repository": {
 		"type": "git",
