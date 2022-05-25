@@ -8,9 +8,9 @@ import {
   TransactionReceipt,
   Filter,
   Log,
-} from "@ethersproject/abstract-provider";
-import { ContractCall } from "ethers-multicall";
-import { v4 as uuid } from "uuid";
+} from '@ethersproject/abstract-provider';
+import { ContractCall } from 'ethers-multicall';
+import { v4 as uuid } from 'uuid';
 import {
   ContractCallError,
   ResolvedCalls,
@@ -26,11 +26,11 @@ import {
   ProviderCallError,
   CallType,
   EthersContractCall,
-} from "./types";
-import { getProvidersWithConfig, silentLogger, timeout } from "./helpers";
-import EventEmitter from "events";
-import { Network } from "@ethersproject/networks";
-import { BigNumber, BigNumberish, ethers } from "ethers";
+} from './types';
+import { getProvidersWithConfig, silentLogger, timeout } from './helpers';
+import EventEmitter from 'events';
+import { Network } from '@ethersproject/networks';
+import { BigNumber, BigNumberish, ethers } from 'ethers';
 
 export class MultiProvider {
   private _providers: MulticallProviderWithConf[];
@@ -96,23 +96,23 @@ export class MultiProvider {
     const ids: string[] = [];
     const promises = calls.map((call) => {
       const id = uuid();
-      const callType = "type" in call ? call.type : CallType.MULTI_CONTRACT;
+      const callType = 'type' in call ? call.type : CallType.MULTI_CONTRACT;
       switch (callType) {
         case CallType.MULTI_CONTRACT:
-          this.pending.multi.new.push({ id, contractCall: <ContractCall>call });
+          this.pending.multi.new.push({ id, contractCall: call as ContractCall });
           break;
         case CallType.ETHERS_CONTRACT:
-          this.pending.ethers.push({ id, call: <EthersContractCall>call });
+          this.pending.ethers.push({ id, call: call as EthersContractCall });
           break;
         case CallType.PROVIDER:
           this.pending.provider.push({
             id,
-            providerCall: <ProviderCall>call,
+            providerCall: call as ProviderCall,
           });
           break;
 
         default:
-          throw new Error("Undetermined callType");
+          throw new Error('Undetermined callType');
       }
       ids.push(id);
       return this.awaitEventOnce(id);
@@ -219,7 +219,7 @@ export class MultiProvider {
       contractCalls.forEach((c) => this._emitter.emit(c.id));
     } catch (error: any) {
       // CALL_EXCEPTION = a failed call in the batch or a dead provider
-      if (error.code === "CALL_EXCEPTION") {
+      if (error.code === 'CALL_EXCEPTION') {
         if (contractCalls.length === 1) {
           this.rejected.multi[contractCalls[0].id] =
             contractCalls[0].contractCall;
@@ -300,18 +300,18 @@ export class MultiProvider {
   }
   // Network
   getNetwork(): Promise<Network> {
-    return this._execute("getNetwork");
+    return this._execute('getNetwork');
   }
 
   // Latest State
   getBlockNumber(): Promise<number> {
-    return this._execute("getBlockNumber");
+    return this._execute('getBlockNumber');
   }
   getGasPrice(): Promise<BigNumber> {
-    return this._execute("getGasPrice");
+    return this._execute('getGasPrice');
   }
   getFeeData(): Promise<FeeData> {
-    return this._execute("getFeeData");
+    return this._execute('getFeeData');
   }
 
   // Account
@@ -319,26 +319,26 @@ export class MultiProvider {
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<BigNumber> {
-    return this._execute("getBalance", addressOrName, blockTag);
+    return this._execute('getBalance', addressOrName, blockTag);
   }
   getTransactionCount(
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<number> {
-    return this._execute("getTransactionCount", addressOrName, blockTag);
+    return this._execute('getTransactionCount', addressOrName, blockTag);
   }
   getCode(
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<string> {
-    return this._execute("getCode", addressOrName, blockTag);
+    return this._execute('getCode', addressOrName, blockTag);
   }
   getStorageAt(
     addressOrName: string | Promise<string>,
     position: BigNumberish | Promise<BigNumberish>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<string> {
-    return this._execute("getStorageAt", addressOrName, position, blockTag);
+    return this._execute('getStorageAt', addressOrName, position, blockTag);
   }
 
   // @TODO Execution methods require a Signer object
@@ -364,31 +364,31 @@ export class MultiProvider {
   getBlock(
     blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
   ): Promise<Block> {
-    return this._execute("getBlock", blockHashOrBlockTag);
+    return this._execute('getBlock', blockHashOrBlockTag);
   }
   getBlockWithTransactions(
     blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
   ): Promise<BlockWithTransactions> {
-    return this._execute("getBlockWithTransactions", blockHashOrBlockTag);
+    return this._execute('getBlockWithTransactions', blockHashOrBlockTag);
   }
   getTransaction(transactionHash: string): Promise<TransactionResponse> {
-    return this._execute("getTransaction", transactionHash);
+    return this._execute('getTransaction', transactionHash);
   }
   getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt> {
-    return this._execute("getTransactionReceipt", transactionHash);
+    return this._execute('getTransactionReceipt', transactionHash);
   }
 
   // Bloom-filter Queries
   getLogs(filter: Filter): Promise<Array<Log>> {
-    return this._execute("getLogs", filter);
+    return this._execute('getLogs', filter);
   }
 
   // ENS
   resolveName(name: string | Promise<string>): Promise<null | string> {
-    return this._execute("resolveName", name);
+    return this._execute('resolveName', name);
   }
   lookupAddress(address: string | Promise<string>): Promise<null | string> {
-    return this._execute("lookupAddress", address);
+    return this._execute('lookupAddress', address);
   }
 
   // Event Emitter (ish)
@@ -416,7 +416,7 @@ export class MultiProvider {
     timeout?: number,
   ): Promise<TransactionReceipt> {
     return this._execute(
-      "waitForTransaction",
+      'waitForTransaction',
       transactionHash,
       confirmations,
       timeout,

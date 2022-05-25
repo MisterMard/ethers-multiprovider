@@ -1,7 +1,7 @@
-import { ContractCall } from "ethers-multicall";
-import { Provider as MulticallProvider } from "./provider";
-import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
-import { Contract } from "./contract";
+import { ContractCall } from 'ethers-multicall';
+import { Provider as MulticallProvider } from './provider';
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
+import { Contract } from './contract';
 
 // Interfaces & Types
 export interface ResolvedCalls {
@@ -50,9 +50,9 @@ export interface EthersContractCallWithId {
 export type Logger = (errorLog: string) => any;
 
 export enum CallType {
-  ETHERS_CONTRACT = "ETHERS_CONTRACT",
-  MULTI_CONTRACT = "MULTI_CONTRACT",
-  PROVIDER = "PROVIDER",
+  ETHERS_CONTRACT = 'ETHERS_CONTRACT',
+  MULTI_CONTRACT = 'MULTI_CONTRACT',
+  PROVIDER = 'PROVIDER',
 }
 
 export interface ConsoleErrorLogger {
@@ -63,19 +63,19 @@ export interface ConsoleErrorLogger {
 export class ContractCallError extends Error {
   contractCall: ContractCall;
   constructor() {
-    super("Contract call failed!");
+    super('Contract call failed!');
   }
 }
 export class EthersCallError extends Error {
   call: EthersCall;
   constructor() {
-    super("Ethers call failed!");
+    super('Ethers call failed!');
   }
 }
 export class ProviderCallError extends Error {
   call: EthersCall;
   constructor() {
-    super("Provider call failed!");
+    super('Provider call failed!');
   }
 }
 // tslint:enable:max-classes-per-file

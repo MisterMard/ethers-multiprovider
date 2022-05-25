@@ -1,6 +1,6 @@
-import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
-import { JsonRpcProvider, WebSocketProvider } from "@ethersproject/providers";
-import { Provider as MultiProvider } from "ethers-multicall";
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
+import { JsonRpcProvider, WebSocketProvider } from '@ethersproject/providers';
+import { Provider as MultiProvider } from 'ethers-multicall';
 
 export class Provider extends MultiProvider {
   url: string;
