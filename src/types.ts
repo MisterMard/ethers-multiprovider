@@ -1,11 +1,11 @@
-import { ContractCall } from 'ethers-multicall';
-import { Provider as MulticallProvider } from './provider';
+import { ContractCall } from "ethers-multicall";
+import { Provider as MulticallProvider } from "./provider";
 import {
   Provider as EthersProvider,
   BlockTag,
-} from '@ethersproject/abstract-provider';
-import { Contract } from './contract';
-import { EventFilter } from '@ethersproject/contracts';
+} from "@ethersproject/abstract-provider";
+import { Contract } from "./contract";
+import { EventFilter } from "@ethersproject/contracts";
 
 // Interfaces & Types
 
@@ -33,13 +33,24 @@ export interface ContractCallWithId {
   contractCall: ContractCall;
 }
 
+export interface ProviderCall {
+  type: CallType;
+  callName: string;
+  params: any[];
+}
+export interface ProviderCallWithId {
+  id: string;
+  providerCall: ProviderCall;
+}
+
 export interface QueryFilterCall {
   contract: Contract;
   event: EventFilter;
   params: [BlockTag?, BlockTag?];
 }
 export interface EthersCall {
-  type: string;
+  type: CallType;
+  callName: string;
   params: QueryFilterCall /* | any */;
 }
 export interface EthersCallWithId {
@@ -47,6 +58,12 @@ export interface EthersCallWithId {
   call: EthersCall;
 }
 export type Logger = (errorLog: string) => any;
+
+export enum CallType {
+  ETHERS_CONTRACT = "ETHERS_CONTRACT",
+  MULTI_CONTRACT = "MULTI_CONTRACT",
+  PROVIDER = "PROVIDER",
+}
 
 export interface ConsoleErrorLogger {
   logError(where: string, error: any, context?: any): void;
@@ -56,13 +73,19 @@ export interface ConsoleErrorLogger {
 export class ContractCallError extends Error {
   contractCall: ContractCall;
   constructor() {
-    super('Contract call failed!');
+    super("Contract call failed!");
   }
 }
 export class EthersCallError extends Error {
   call: EthersCall;
   constructor() {
-    super('Ethers call failed!');
+    super("Ethers call failed!");
+  }
+}
+export class ProviderCallError extends Error {
+  call: ProviderCall;
+  constructor() {
+    super("Provider call failed!");
   }
 }
 // tslint:enable:max-classes-per-file
