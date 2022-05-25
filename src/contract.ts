@@ -1,5 +1,5 @@
 import { Fragment, Interface, JsonFragment } from "@ethersproject/abi";
-import { Contract as MultiContract } from "ethers-multicall";
+import { Contract as MultiContract, ContractCall } from "ethers-multicall";
 import { BlockTag } from "@ethersproject/abstract-provider";
 import {
   Event,
@@ -9,7 +9,7 @@ import {
 import { EventFragment } from "ethers/lib/utils";
 import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
 import { MultiProvider } from "./multi-provider";
-import { CallType, EthersCall, EthersContractCall } from "./types";
+import { CallType, EthersContractCall } from "./types";
 
 export class Contract extends MultiContract {
   private _filters: { [name: string]: (...args: Array<any>) => EventFilter } =
@@ -17,9 +17,20 @@ export class Contract extends MultiContract {
   private _eventFragments: EventFragment[];
   private _interface: Interface;
   private _multiProvider: MultiProvider;
+  private _callStatic: {
+    [name: string]: (...args: Array<any>) => Promise<any>;
+  } = {};
 
   get filters() {
     return this._filters;
+  }
+
+  get callStatic() {
+    return this._callStatic;
+  }
+
+  get multiProvider() {
+    return this._multiProvider;
   }
 
   constructor(
@@ -65,6 +76,14 @@ export class Contract extends MultiContract {
         }
       });
     }
+
+    for (const func of this.functions) {
+      const { name } = func;
+      const getCall = makeCallStaticFunction(this, name);
+      if (!this._callStatic[name]) {
+        this._callStatic[name] = getCall;
+      }
+    }
   }
 
   queryFilter(
@@ -74,33 +93,54 @@ export class Contract extends MultiContract {
   ) {
     if (!this._multiProvider)
       throw new Error("No MultiProvider were supplied!");
+    const contractCall: ContractCall = {
+      contract: { address: this.address },
+      name: "",
+      inputs: [],
+      outputs: [],
+      params: [event, fromBlockOrBlockhash, toBlock],
+    };
     const ethersCall: EthersContractCall = {
       type: CallType.ETHERS_CONTRACT,
-      callName: "queryFilter",
+      methodName: "queryFilter",
       contract: this,
-      params: [event, fromBlockOrBlockhash, toBlock],
+      contractCall,
     };
     return this._multiProvider.all([ethersCall]);
   }
   private async _queryFilter(
     provider: EthersProvider,
-    params: any[],
+    ethersCall: EthersContractCall,
   ): Promise<Array<Event>> {
     const contract = new EthersContract(
       this.address,
       this._eventFragments,
       provider,
     );
+    const { params } = ethersCall.contractCall;
     return contract["queryFilter"](params[0], params[1], params[2]);
+  }
+  private async _executeCallStatic(
+    provider: EthersProvider,
+    ethersCall: EthersContractCall,
+  ) {
+    const contract = new EthersContract(
+      this.address,
+      this._interface,
+      provider,
+    );
+    return contract.callStatic[ethersCall.methodName](
+      ...ethersCall.contractCall.params,
+    );
   }
 
   executeEthersCall(ethersCall: EthersContractCall, provider: EthersProvider) {
-    switch (ethersCall.callName) {
+    switch (ethersCall.methodName) {
       case "queryFilter":
-        return this._queryFilter(provider, ethersCall.params);
+        return this._queryFilter(provider, ethersCall);
 
       default:
-        break;
+        return this._executeCallStatic(provider, ethersCall);
     }
   }
 }
@@ -109,6 +149,35 @@ function toFragment(abi: JsonFragment[] | string[] | Fragment[]): Fragment[] {
   return abi.map((item: JsonFragment | string | Fragment) =>
     Fragment.from(item),
   );
+}
+
+function makeCallStaticFunction(
+  multiContract: Contract,
+  name: string,
+): (...args: Array<any>) => Promise<any> {
+  return (...params: any[]) => {
+    if (!multiContract.multiProvider)
+      throw new Error("No MultiProvider were supplied!");
+    const { address } = multiContract;
+    const { inputs } = multiContract.functions.find((f) => f.name === name);
+    const { outputs } = multiContract.functions.find((f) => f.name === name);
+    const contractCall = {
+      contract: {
+        address,
+      },
+      name,
+      inputs,
+      outputs,
+      params,
+    };
+    const ethersCall: EthersContractCall = {
+      type: CallType.ETHERS_CONTRACT,
+      methodName: name,
+      contract: multiContract,
+      contractCall,
+    };
+    return multiContract.multiProvider.all([ethersCall]).then((x) => x[0]);
+  };
 }
 
 function defineReadOnly(object: object, name: string, value: unknown) {

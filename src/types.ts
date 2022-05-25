@@ -1,14 +1,9 @@
 import { ContractCall } from "ethers-multicall";
 import { Provider as MulticallProvider } from "./provider";
-import {
-  Provider as EthersProvider,
-  BlockTag,
-} from "@ethersproject/abstract-provider";
+import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
 import { Contract } from "./contract";
-import { EventFilter } from "@ethersproject/contracts";
 
 // Interfaces & Types
-
 export interface ResolvedCalls {
   [id: string]: any;
 }
@@ -28,33 +23,25 @@ export interface EthersProviderWithConf {
   provider: EthersProvider;
   conf: OptionalConf;
 }
-export interface ContractCallWithId {
+export interface MultiContractCallWithId {
   id: string;
   contractCall: ContractCall;
 }
 
-// export interface ProviderCall {
-//   type: CallType;
-//   callName: string;
-//   params: any[];
-// }
-export interface ProviderCallWithId {
-  id: string;
-  providerCall: EthersCall;
-}
-
-// export interface QueryFilterCall {
-//   contract: Contract;
-//   event: EventFilter;
-//   params: [BlockTag?, BlockTag?];
-// }
 export interface EthersCall {
   type: CallType;
-  callName: string;
+  methodName: string;
+}
+export interface ProviderCall extends EthersCall {
   params: any[];
+}
+export interface ProviderCallWithId {
+  id: string;
+  providerCall: ProviderCall;
 }
 export interface EthersContractCall extends EthersCall {
   contract: Contract;
+  contractCall: ContractCall;
 }
 export interface EthersContractCallWithId {
   id: string;
@@ -80,7 +67,7 @@ export class ContractCallError extends Error {
   }
 }
 export class EthersCallError extends Error {
-  call: EthersContractCall;
+  call: EthersCall;
   constructor() {
     super("Ethers call failed!");
   }
