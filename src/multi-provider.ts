@@ -1,5 +1,14 @@
-import { Provider as MulticallProvider } from "./provider";
-import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
+import {
+  Provider as EthersProvider,
+  FeeData,
+  BlockTag,
+  Block,
+  BlockWithTransactions,
+  TransactionResponse,
+  TransactionReceipt,
+  Filter,
+  Log,
+} from "@ethersproject/abstract-provider";
 import { ContractCall } from "ethers-multicall";
 import { v4 as uuid } from "uuid";
 import {
@@ -21,7 +30,7 @@ import {
 import { getProvidersWithConfig, silentLogger, timeout } from "./helpers";
 import EventEmitter from "events";
 import { Network } from "@ethersproject/networks";
-import { ethers } from "ethers";
+import { BigNumber, BigNumberish, ethers } from "ethers";
 
 export class MultiProvider {
   private _providers: MulticallProviderWithConf[];
@@ -281,105 +290,107 @@ export class MultiProvider {
   }
 
   // EthersProvider methods
-  // Network
-  async getNetwork(): Promise<Network> {
+  private async _execute(callName: string, ...params: any[]) {
     const providerCall: EthersCall = {
       type: CallType.PROVIDER,
-      callName: "getNetwork",
-      params: [],
+      callName: callName,
+      params: [...params],
     };
     const id = await this.queueCallsAndWaitResolve([providerCall]);
     return this.getResponse(id[0]);
+  }
+  // Network
+  getNetwork(): Promise<Network> {
+    return this._execute("getNetwork");
   }
 
   // Latest State
-  async getBlockNumber(): Promise<number> {
-    const providerCall: EthersCall = {
-      type: CallType.PROVIDER,
-      callName: "getBlockNumber",
-      params: [],
-    };
-    const id = await this.queueCallsAndWaitResolve([providerCall]);
-    return this.getResponse(id[0]);
+  getBlockNumber(): Promise<number> {
+    return this._execute("getBlockNumber");
   }
-  // abstract getGasPrice(): Promise<BigNumber>;
-  // async getFeeData(): Promise<FeeData> {
-  //   const { block, gasPrice } = await resolveProperties({
-  //     block: this.getBlock("latest"),
-  //     gasPrice: this.getGasPrice().catch((error) => {
-  //       // @TODO: Why is this now failing on Calaveras?
-  //       //console.log(error);
-  //       return null;
-  //     }),
-  //   });
+  getGasPrice(): Promise<BigNumber> {
+    return this._execute("getGasPrice");
+  }
+  getFeeData(): Promise<FeeData> {
+    return this._execute("getFeeData");
+  }
 
-  //   let maxFeePerGas = null,
-  //     maxPriorityFeePerGas = null;
+  // Account
+  getBalance(
+    addressOrName: string | Promise<string>,
+    blockTag?: BlockTag | Promise<BlockTag>,
+  ): Promise<BigNumber> {
+    return this._execute("getBalance", addressOrName, blockTag);
+  }
+  getTransactionCount(
+    addressOrName: string | Promise<string>,
+    blockTag?: BlockTag | Promise<BlockTag>,
+  ): Promise<number> {
+    return this._execute("getTransactionCount", addressOrName, blockTag);
+  }
+  getCode(
+    addressOrName: string | Promise<string>,
+    blockTag?: BlockTag | Promise<BlockTag>,
+  ): Promise<string> {
+    return this._execute("getCode", addressOrName, blockTag);
+  }
+  getStorageAt(
+    addressOrName: string | Promise<string>,
+    position: BigNumberish | Promise<BigNumberish>,
+    blockTag?: BlockTag | Promise<BlockTag>,
+  ): Promise<string> {
+    return this._execute("getStorageAt", addressOrName, position, blockTag);
+  }
 
-  //   if (block && block.baseFeePerGas) {
-  //     // We may want to compute this more accurately in the future,
-  //     // using the formula "check if the base fee is correct".
-  //     // See: https://eips.ethereum.org/EIPS/eip-1559
-  //     maxPriorityFeePerGas = BigNumber.from("1500000000");
-  //     maxFeePerGas = block.baseFeePerGas.mul(2).add(maxPriorityFeePerGas);
-  //   }
-
-  //   return { maxFeePerGas, maxPriorityFeePerGas, gasPrice };
-  // }
-
-  // // Account
-  // abstract getBalance(
-  //   addressOrName: string | Promise<string>,
-  //   blockTag?: BlockTag | Promise<BlockTag>,
-  // ): Promise<BigNumber>;
-  // abstract getTransactionCount(
-  //   addressOrName: string | Promise<string>,
-  //   blockTag?: BlockTag | Promise<BlockTag>,
-  // ): Promise<number>;
-  // abstract getCode(
-  //   addressOrName: string | Promise<string>,
-  //   blockTag?: BlockTag | Promise<BlockTag>,
-  // ): Promise<string>;
-  // abstract getStorageAt(
-  //   addressOrName: string | Promise<string>,
-  //   position: BigNumberish | Promise<BigNumberish>,
-  //   blockTag?: BlockTag | Promise<BlockTag>,
-  // ): Promise<string>;
-
-  // // Execution
-  // abstract sendTransaction(
+  // @TODO Execution methods require a Signer object
+  // Execution
+  // sendTransaction(
   //   signedTransaction: string | Promise<string>,
-  // ): Promise<TransactionResponse>;
-  // abstract call(
+  // ): Promise<TransactionResponse>{
+  //   return this._execute("sendTransaction", signedTransaction);
+  // };
+  // call(
   //   transaction: Deferrable<TransactionRequest>,
   //   blockTag?: BlockTag | Promise<BlockTag>,
-  // ): Promise<string>;
-  // abstract estimateGas(
+  // ): Promise<string>{
+  //   return this._execute("call", transaction,blockTag);
+  // };
+  // estimateGas(
   //   transaction: Deferrable<TransactionRequest>,
-  // ): Promise<BigNumber>;
+  // ): Promise<BigNumber>{
+  //   return this._execute("estimateGas", transaction);
+  // };
 
-  // // Queries
-  // abstract getBlock(
-  //   blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
-  // ): Promise<Block>;
-  // abstract getBlockWithTransactions(
-  //   blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
-  // ): Promise<BlockWithTransactions>;
-  // abstract getTransaction(
-  //   transactionHash: string,
-  // ): Promise<TransactionResponse>;
-  // abstract getTransactionReceipt(
-  //   transactionHash: string,
-  // ): Promise<TransactionReceipt>;
+  // Queries
+  getBlock(
+    blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
+  ): Promise<Block> {
+    return this._execute("getBlock", blockHashOrBlockTag);
+  }
+  getBlockWithTransactions(
+    blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
+  ): Promise<BlockWithTransactions> {
+    return this._execute("getBlockWithTransactions", blockHashOrBlockTag);
+  }
+  getTransaction(transactionHash: string): Promise<TransactionResponse> {
+    return this._execute("getTransaction", transactionHash);
+  }
+  getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt> {
+    return this._execute("getTransactionReceipt", transactionHash);
+  }
 
-  // // Bloom-filter Queries
-  // abstract getLogs(filter: Filter): Promise<Array<Log>>;
+  // Bloom-filter Queries
+  getLogs(filter: Filter): Promise<Array<Log>> {
+    return this._execute("getLogs", filter);
+  }
 
-  // // ENS
-  // abstract resolveName(name: string | Promise<string>): Promise<null | string>;
-  // abstract lookupAddress(
-  //   address: string | Promise<string>,
-  // ): Promise<null | string>;
+  // ENS
+  resolveName(name: string | Promise<string>): Promise<null | string> {
+    return this._execute("resolveName", name);
+  }
+  lookupAddress(address: string | Promise<string>): Promise<null | string> {
+    return this._execute("lookupAddress", address);
+  }
 
   // Event Emitter (ish)
   // abstract on(eventName: EventType, listener: Listener): Provider;
@@ -400,12 +411,19 @@ export class MultiProvider {
   //     return this.off(eventName, listener);
   // }
 
-  // @TODO: This *could* be implemented here, but would pull in events...
-  // abstract waitForTransaction(
-  //   transactionHash: string,
-  //   confirmations?: number,
-  //   timeout?: number,
-  // ): Promise<TransactionReceipt>;
+  
+  waitForTransaction(
+    transactionHash: string,
+    confirmations?: number,
+    timeout?: number,
+  ): Promise<TransactionReceipt> {
+    return this._execute(
+      "waitForTransaction",
+      transactionHash,
+      confirmations,
+      timeout,
+    );
+  }
 }
 
 function isEthersCall(object: any): object is EthersContractCall {

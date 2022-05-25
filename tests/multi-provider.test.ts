@@ -127,22 +127,74 @@ describe("Testing ethers-calls-mgr", () => {
   });
 
   it("Handles provider calls properly", async () => {
+    const test = {
+      address: "0x3e908d75caf0afc15fdff1bc2af77ff38fc7b5d3",
+      contract: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+      txnHash:
+        "0x0ac2d751d900748f08d297195884684ddd67d941246dafef6db4fa9a7f5e4de9",
+      blockNumber: 12748512,
+      filter: {
+        address: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+        topics: [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          "0x0000000000000000000000003e908d75caf0afc15fdff1bc2af77ff38fc7b5d3",
+          "0x000000000000000000000000f3f094484ec6901ffc9681bcb808b96bafd0b8a8",
+        ],
+        fromBlock: 12748512,
+        toBlock: 12748512,
+      },
+    };
     const err = [];
     try {
-      const [getNetworkProm, getBlockNumberProm] = [
+      const [
+        getNetwork,
+        getBlockNumber,
+        getGasPrice,
+        getFeeData,
+        getBalance,
+        getTransactionCount,
+        getCode,
+        getStorageAt,
+        getBlock,
+        getBlockWithTransactions,
+        getTransaction,
+        getTransactionReceipt,
+        getLogs,
+        waitForTransaction,
+      ] = await Promise.all([
         multiProvider.getNetwork(),
         multiProvider.getBlockNumber(),
-      ];
-      const [getNetwork, getBlockNumber] = [
-        await getNetworkProm,
-        await getBlockNumberProm,
-      ];
+        multiProvider.getGasPrice(),
+        multiProvider.getFeeData(),
+        multiProvider.getBalance(test.address),
+        multiProvider.getTransactionCount(test.address),
+        multiProvider.getCode(test.contract),
+        multiProvider.getStorageAt(test.contract, 0),
+        multiProvider.getBlock(12748512),
+        multiProvider.getBlockWithTransactions(12748512),
+        multiProvider.getTransaction(test.txnHash),
+        multiProvider.getTransactionReceipt(test.txnHash),
+        multiProvider.getLogs(test.filter),
+        multiProvider.waitForTransaction(test.txnHash),
+      ]);
 
       expect(getNetwork.name).toBe("arbitrum");
       expect(getBlockNumber).toBeGreaterThan(0);
+      expect(getGasPrice).toBeInstanceOf(BigNumber);
+      expect(getFeeData.gasPrice).toBeInstanceOf(BigNumber);
+      expect(getBalance).toBeInstanceOf(BigNumber);
+      expect(getTransactionCount).toBeGreaterThan(0);
+      expect(getCode.length).toBeGreaterThan(0);
+      expect(parseInt(getStorageAt)).toBe(1);
+      expect(getBlock.number).toBe(12748512);
+      expect(getBlockWithTransactions.number).toBe(12748512);
+      expect(getTransaction.hash).toBe(test.txnHash);
+      expect(getTransactionReceipt.transactionHash).toBe(test.txnHash);
+      expect(getLogs.length).toBe(1);
+      expect(waitForTransaction.transactionHash).toBe(test.txnHash);
     } catch (error) {
       err.push(error);
     }
     expect(err.length).toBe(0);
-  });
+  }, 20000);
 });
