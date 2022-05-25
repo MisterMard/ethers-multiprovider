@@ -9,7 +9,7 @@ import {
 import { EventFragment } from "ethers/lib/utils";
 import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
 import { MultiProvider } from "./multi-provider";
-import { CallType, EthersCall, QueryFilterCall } from "./types";
+import { CallType, EthersCall, EthersContractCall } from "./types";
 
 export class Contract extends MultiContract {
   private _filters: { [name: string]: (...args: Array<any>) => EventFilter } =
@@ -74,37 +74,30 @@ export class Contract extends MultiContract {
   ) {
     if (!this._multiProvider)
       throw new Error("No MultiProvider were supplied!");
-    const ethersCall: EthersCall = {
+    const ethersCall: EthersContractCall = {
       type: CallType.ETHERS_CONTRACT,
-      callName: "QUERY_FILTER",
-      params: {
-        contract: this,
-        event,
-        params: [fromBlockOrBlockhash, toBlock],
-      },
+      callName: "queryFilter",
+      contract: this,
+      params: [event, fromBlockOrBlockhash, toBlock],
     };
     return this._multiProvider.all([ethersCall]);
   }
   private async _queryFilter(
-    params: QueryFilterCall,
     provider: EthersProvider,
+    params: any[],
   ): Promise<Array<Event>> {
     const contract = new EthersContract(
       this.address,
       this._eventFragments,
       provider,
     );
-    return contract.queryFilter(
-      params.event,
-      params.params[0],
-      params.params[1],
-    );
+    return contract["queryFilter"](params[0], params[1], params[2]);
   }
 
-  executeEthersCall(ethersCall: EthersCall, provider: EthersProvider) {
+  executeEthersCall(ethersCall: EthersContractCall, provider: EthersProvider) {
     switch (ethersCall.callName) {
-      case "QUERY_FILTER":
-        return this._queryFilter(ethersCall.params, provider);
+      case "queryFilter":
+        return this._queryFilter(provider, ethersCall.params);
 
       default:
         break;

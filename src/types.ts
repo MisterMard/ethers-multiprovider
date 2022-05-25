@@ -33,29 +33,32 @@ export interface ContractCallWithId {
   contractCall: ContractCall;
 }
 
-export interface ProviderCall {
+// export interface ProviderCall {
+//   type: CallType;
+//   callName: string;
+//   params: any[];
+// }
+export interface ProviderCallWithId {
+  id: string;
+  providerCall: EthersCall;
+}
+
+// export interface QueryFilterCall {
+//   contract: Contract;
+//   event: EventFilter;
+//   params: [BlockTag?, BlockTag?];
+// }
+export interface EthersCall {
   type: CallType;
   callName: string;
   params: any[];
 }
-export interface ProviderCallWithId {
-  id: string;
-  providerCall: ProviderCall;
-}
-
-export interface QueryFilterCall {
+export interface EthersContractCall extends EthersCall {
   contract: Contract;
-  event: EventFilter;
-  params: [BlockTag?, BlockTag?];
 }
-export interface EthersCall {
-  type: CallType;
-  callName: string;
-  params: QueryFilterCall /* | any */;
-}
-export interface EthersCallWithId {
+export interface EthersContractCallWithId {
   id: string;
-  call: EthersCall;
+  call: EthersContractCall;
 }
 export type Logger = (errorLog: string) => any;
 
@@ -77,13 +80,13 @@ export class ContractCallError extends Error {
   }
 }
 export class EthersCallError extends Error {
-  call: EthersCall;
+  call: EthersContractCall;
   constructor() {
     super("Ethers call failed!");
   }
 }
 export class ProviderCallError extends Error {
-  call: ProviderCall;
+  call: EthersCall;
   constructor() {
     super("Provider call failed!");
   }

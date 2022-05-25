@@ -15,7 +15,7 @@ export class Provider extends MultiProvider {
     if (provider instanceof WebSocketProvider) {
       this.url = provider._websocket._url;
       this.destroy = () => {
-        return (this.ethersProvider as WebSocketProvider).destroy();
+        return provider.destroy();
       };
     }
   }

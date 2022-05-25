@@ -7,15 +7,16 @@ import {
   ResolvedCalls,
   MulticallProviderWithConf,
   ContractCallWithId,
-  EthersCallWithId,
+  EthersContractCallWithId,
   Logger,
   EthersProviderWithConf,
   EthersCall,
   EthersCallError,
   ProviderCallWithId,
-  ProviderCall,
+  // ProviderCall,
   ProviderCallError,
   CallType,
+  EthersContractCall,
 } from "./types";
 import { getProvidersWithConfig, silentLogger, timeout } from "./helpers";
 import EventEmitter from "events";
@@ -28,12 +29,14 @@ export class MultiProvider {
   private _emitter: EventEmitter;
   private pendingWithError: ContractCallWithId[][] = [];
   private pending: ContractCallWithId[] = [];
-  private pendingEthers: EthersCallWithId[] = [];
+  private pendingEthers: EthersContractCallWithId[] = [];
   private pendingProviderCalls: ProviderCallWithId[] = [];
   private resolvedCalls: ResolvedCalls = {};
-  private rejectedMulticalls: { [id: string]: ContractCall } = {};
-  private rejectedEthersCalls: { [id: string]: EthersCall } = {};
-  private rejectedProviderCalls: { [id: string]: ProviderCall } = {};
+  private rejected: {
+    multi: { [id: string]: ContractCall };
+    ethers: { [id: string]: EthersContractCall };
+    provider: { [id: string]: EthersCall };
+  } = { multi: {}, ethers: {}, provider: {} };
   private _logErrors: boolean;
   private _logger: Logger;
 
@@ -47,37 +50,39 @@ export class MultiProvider {
     this._emitter = new EventEmitter();
   }
 
-  public async all(calls: (ContractCall | EthersCall)[]) {
+  public async all(calls: (ContractCall | EthersContractCall | EthersCall)[]) {
     const ids = await this.queueCallsAndWaitResolve(calls);
 
     return Promise.all(ids.map((id) => this.getResponse(id)));
   }
-  public async allSettled(calls: ContractCall[]) {
+  public async allSettled(
+    calls: (ContractCall | EthersContractCall | EthersCall)[],
+  ) {
     const ids = await this.queueCallsAndWaitResolve(calls);
 
     return Promise.allSettled(ids.map((id) => this.getResponse(id)));
   }
   private getResponse(id: string): Promise<any> {
-    if (this.rejectedMulticalls[id]) {
+    if (this.rejected.multi[id]) {
       const err = new ContractCallError();
-      err.contractCall = this.rejectedMulticalls[id];
+      err.contractCall = this.rejected.multi[id];
       return Promise.reject(err);
     }
-    if (this.rejectedEthersCalls[id]) {
+    if (this.rejected.ethers[id]) {
       const err = new EthersCallError();
-      err.call = this.rejectedEthersCalls[id];
+      err.call = this.rejected.ethers[id];
       return Promise.reject(err);
     }
-    if (this.rejectedProviderCalls[id]) {
+    if (this.rejected.provider[id]) {
       const err = new ProviderCallError();
-      err.call = this.rejectedProviderCalls[id];
+      err.call = this.rejected.provider[id];
       return Promise.reject(err);
     }
 
     return this.resolvedCalls[id];
   }
   private async queueCallsAndWaitResolve(
-    calls: (ContractCall | EthersCall | ProviderCall)[],
+    calls: (ContractCall | EthersContractCall | EthersCall)[],
   ) {
     const ids: string[] = [];
     const promises = calls.map((call) => {
@@ -88,12 +93,12 @@ export class MultiProvider {
           this.pending.push({ id, contractCall: <ContractCall>call });
           break;
         case CallType.ETHERS_CONTRACT:
-          this.pendingEthers.push({ id, call: <EthersCall>call });
+          this.pendingEthers.push({ id, call: <EthersContractCall>call });
           break;
         case CallType.PROVIDER:
           this.pendingProviderCalls.push({
             id,
-            providerCall: <ProviderCall>call,
+            providerCall: <EthersCall>call,
           });
           break;
 
@@ -105,62 +110,40 @@ export class MultiProvider {
       return this.awaitEventOnce(id);
     });
 
-    this.run();
+    this.runNext();
 
     await Promise.all(promises);
     return ids;
   }
 
-  // @TODO Group the following into a single object
-  private runPending() {
-    return (
-      this.pending.length && this._mpsInUse.length !== this._providers.length
-    );
-  }
+  private runNext() {
+    if (this._mpsInUse.length !== this._providers.length) {
+      // Provider > ErroredMulticall > Etherscalls > Multicalls
+      if (this.pendingProviderCalls.length) {
+        const provider = this.getRandomProvider();
+        this.executeProviderWrapper(
+          provider,
+          this.pendingProviderCalls.shift(),
+        );
+      } else if (this.pendingWithError.length) {
+        const provider = this.getRandomProvider();
+        this.resolveErroredCalls(provider, this.pendingWithError.shift());
+      } else if (this.pendingEthers.length) {
+        const provider = this.getRandomProvider();
+        this.executeEthersWrapper(provider, this.pendingEthers.shift());
+      } else if (this.pending.length) {
+        const provider = this.getRandomProvider();
+        const callbacksBatch: ContractCallWithId[] = [];
+        while (
+          callbacksBatch.length < provider.conf.batchSize &&
+          this.pending.length
+        ) {
+          callbacksBatch.push(this.pending.shift());
+        }
+        this.executeWrapper(provider, callbacksBatch);
+      } else return;
 
-  private runErrored() {
-    return (
-      this.pendingWithError.length &&
-      this._mpsInUse.length !== this._providers.length
-    );
-  }
-  private runEthers() {
-    return (
-      this.pendingEthers.length &&
-      this._mpsInUse.length !== this._providers.length
-    );
-  }
-  private runProvider() {
-    return (
-      this.pendingProviderCalls.length &&
-      this._mpsInUse.length !== this._providers.length
-    );
-  }
-
-  // @TODO turn into a switch statement
-  private run() {
-    if (this.runProvider()) {
-      const provider = this.getRandomProvider();
-      this.executeProviderWrapper(provider, this.pendingProviderCalls.shift());
-      this.run();
-    } else if (this.runErrored()) {
-      this.resolveErroredCalls(this.pendingWithError.shift());
-    } else if (this.runEthers()) {
-      const provider = this.getRandomProvider();
-      this.executeEthersWrapper(provider, this.pendingEthers.shift());
-      this.run();
-    } else if (this.runPending()) {
-      const callbacksBatch: ContractCallWithId[] = [];
-      const provider = this.getRandomProvider();
-      while (
-        callbacksBatch.length < provider.conf.batchSize &&
-        this.pending.length
-      ) {
-        callbacksBatch.push(this.pending.shift());
-      }
-
-      this.executeWrapper(provider, callbacksBatch);
-      this.run();
+      this.runNext();
     }
   }
 
@@ -175,7 +158,7 @@ export class MultiProvider {
       );
       this.resolvedCalls[call.id] = res;
     } catch (error) {
-      this.rejectedProviderCalls[call.id] = call.providerCall;
+      this.rejected.provider[call.id] = call.providerCall;
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
@@ -184,25 +167,26 @@ export class MultiProvider {
 
   private async executeEthersWrapper(
     provider: MulticallProviderWithConf,
-    call: EthersCallWithId,
+    call: EthersContractCallWithId,
   ) {
     try {
-      const res = await call.call.params.contract.executeEthersCall(
+      const res = await call.call.contract.executeEthersCall(
         call.call,
         provider.provider.ethersProvider,
       );
       this.resolvedCalls[call.id] = res;
     } catch (error) {
-      this.rejectedEthersCalls[call.id] = call.call;
+      this.rejected.ethers[call.id] = call.call;
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
     }
   }
 
-  private async resolveErroredCalls(erroredCalls: ContractCallWithId[]) {
-    const provider = this.getRandomProvider();
-
+  private async resolveErroredCalls(
+    provider: MulticallProviderWithConf,
+    erroredCalls: ContractCallWithId[],
+  ) {
     // ensure the calls length < provider max batch size
     const callsForCurrentProvider: ContractCallWithId[] = [];
     while (
@@ -229,7 +213,7 @@ export class MultiProvider {
       // CALL_EXCEPTION = a failed call in the batch or a dead provider
       if (error.code === "CALL_EXCEPTION") {
         if (contractCalls.length === 1) {
-          this.rejectedMulticalls[contractCalls[0].id] =
+          this.rejected.multi[contractCalls[0].id] =
             contractCalls[0].contractCall;
           this._emitter.emit(contractCalls[0].id);
         } else {
@@ -281,8 +265,7 @@ export class MultiProvider {
     const index = this._mpsInUse.findIndex((x) => x === prov);
     this._mpsInUse.splice(index, 1);
     await timeout(prov.conf.callsDelay);
-    this._emitter.emit("provider freed");
-    this.run();
+    this.runNext();
   }
 
   private awaitEventOnce(eventStr: string) {
@@ -300,22 +283,25 @@ export class MultiProvider {
   // EthersProvider methods
   // Network
   async getNetwork(): Promise<Network> {
-    // const id = uuid();
-    const providerCall: ProviderCall = {
+    const providerCall: EthersCall = {
       type: CallType.PROVIDER,
       callName: "getNetwork",
       params: [],
     };
-    // this.pendingProviderCalls.push({ id, providerCall });
-    // return this.getResponse(id);
-    const id = await this.queueCallsAndWaitResolve(
-      [providerCall],
-    );
+    const id = await this.queueCallsAndWaitResolve([providerCall]);
     return this.getResponse(id[0]);
   }
 
   // Latest State
-  // abstract getBlockNumber(): Promise<number>;
+  async getBlockNumber(): Promise<number> {
+    const providerCall: EthersCall = {
+      type: CallType.PROVIDER,
+      callName: "getBlockNumber",
+      params: [],
+    };
+    const id = await this.queueCallsAndWaitResolve([providerCall]);
+    return this.getResponse(id[0]);
+  }
   // abstract getGasPrice(): Promise<BigNumber>;
   // async getFeeData(): Promise<FeeData> {
   //   const { block, gasPrice } = await resolveProperties({
@@ -422,10 +408,10 @@ export class MultiProvider {
   // ): Promise<TransactionReceipt>;
 }
 
-function isEthersCall(object: any): object is EthersCall {
+function isEthersCall(object: any): object is EthersContractCall {
   return object.type === CallType.ETHERS_CONTRACT;
 }
 
-function isProviderCall(object: any): object is ProviderCall {
+function isProviderCall(object: any): object is EthersCall {
   return object.type === CallType.PROVIDER;
 }

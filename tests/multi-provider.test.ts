@@ -123,14 +123,23 @@ describe("Testing ethers-calls-mgr", () => {
   }, 10000);
 
   it("Catches problematic providers", async () => {
-    // @TODO: add an async method to supplied providers' connectivity
+    // @TODO: add an async method to test supplied providers' connectivity
   });
 
   it("Handles provider calls properly", async () => {
     const err = [];
     try {
-      const providerCall = await multiProvider.getNetwork();
-      expect(providerCall.name).toBe("arbitrum");
+      const [getNetworkProm, getBlockNumberProm] = [
+        multiProvider.getNetwork(),
+        multiProvider.getBlockNumber(),
+      ];
+      const [getNetwork, getBlockNumber] = [
+        await getNetworkProm,
+        await getBlockNumberProm,
+      ];
+
+      expect(getNetwork.name).toBe("arbitrum");
+      expect(getBlockNumber).toBeGreaterThan(0);
     } catch (error) {
       err.push(error);
     }
