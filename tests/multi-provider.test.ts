@@ -1,6 +1,6 @@
 import { BigNumber, ethers } from 'ethers';
 import { Contract, MultiProvider } from '../src/index';
-import jarAbi from './jar.json';
+import erc20Abi from './erc20.json';
 
 const failAbi = [
   {
@@ -64,19 +64,31 @@ describe('Testing ethers-calls-mgr', () => {
       }),
     );
     arb.providerUrls.wss.forEach((wss) =>
-      ethersProvidersWithConf.push(new ethers.providers.WebSocketProvider(wss)),
+      ethersProvidersWithConf.push({
+        provider: new ethers.providers.WebSocketProvider(wss),
+      }),
     );
-    multiProvider = new MultiProvider(ethersProvidersWithConf, 42161);
+    multiProvider = new MultiProvider(
+      42161,
+      {
+        multicallAddress: '0x813715eF627B01f4931d8C6F8D2459F26E19137E',
+      },
+      console.log,
+    );
+    await Promise.all(
+      ethersProvidersWithConf.map((e) =>
+        multiProvider.addProvider(e.provider, e.conf),
+      ),
+    );
   });
   afterAll(async () => {
     await multiProvider.stop();
-    console.log('done');
-  });
+  }, 3000);
 
   it('Handles multi-calls properly', async () => {
     const err = [];
     try {
-      const contract = new Contract(arb.usdcAddr, jarAbi);
+      const contract = new Contract(arb.usdcAddr, erc20Abi);
       const calls = arb.addresses.map((addr) => contract.balanceOf(addr));
       const mCalls = calls.flatMap((x) => Array(10).fill(x));
       const results = await multiProvider.all(mCalls);
@@ -91,13 +103,12 @@ describe('Testing ethers-calls-mgr', () => {
   it('Handles multi-calls with errors', async () => {
     const err = [];
     try {
-      const contract = new Contract(arb.usdcAddr, jarAbi.concat(failAbi));
+      const contract = new Contract(arb.usdcAddr, erc20Abi.concat(failAbi));
       const calls = arb.addresses.map((addr) => contract.balanceOf(addr));
       const mCalls = [contract.fail()].concat(
         calls.flatMap((x) => Array(10).fill(x)),
       );
       const results = await multiProvider.allSettled(mCalls);
-
       expect(results.filter((r) => r.status === 'rejected').length).toBe(1);
     } catch (error) {
       err.push(error);
@@ -108,7 +119,7 @@ describe('Testing ethers-calls-mgr', () => {
   it('Handles queryFilter calls properly', async () => {
     const err = [];
     try {
-      const contract = new Contract(arb.usdcAddr, jarAbi, multiProvider);
+      const contract = new Contract(arb.usdcAddr, erc20Abi, multiProvider);
       const queryFilterCall = contract.queryFilter(
         contract.filters.Transfer(),
         12794665,
@@ -201,12 +212,11 @@ describe('Testing ethers-calls-mgr', () => {
   it('Handles callStatic calls properly', async () => {
     const err = [];
     try {
-      const contract = new Contract(arb.usdcAddr, jarAbi, multiProvider);
+      const contract = new Contract(arb.usdcAddr, erc20Abi, multiProvider);
       const proms = arb.addresses.map((addr) =>
         contract.callStatic.balanceOf(addr),
       );
       const resps = await Promise.all(proms);
-      console.log(resps);
       resps.forEach((r) => expect(r).toBeInstanceOf(BigNumber));
     } catch (error) {
       err.push(error);

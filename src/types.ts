@@ -1,7 +1,7 @@
-import { ContractCall } from 'ethers-multicall';
+// import { ContractCall } from 'ethers-multicall';
 import { Provider as MulticallProvider } from './provider';
-import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
 import { Contract } from './contract';
+import { ParamType } from '@ethersproject/abi';
 
 // Interfaces & Types
 export interface ResolvedCalls {
@@ -10,6 +10,7 @@ export interface ResolvedCalls {
 export interface ProviderConf {
   callsDelay: number; // time delay between calls in ms
   batchSize: number;
+  multicallAddress?: string;
 }
 export interface MulticallProviderWithConf {
   provider: MulticallProvider;
@@ -18,36 +19,8 @@ export interface MulticallProviderWithConf {
 export interface OptionalConf {
   callsDelay?: number;
   batchSize?: number;
+  multicallAddress?: string;
 }
-export interface EthersProviderWithConf {
-  provider: EthersProvider;
-  conf: OptionalConf;
-}
-export interface MultiContractCallWithId {
-  id: string;
-  contractCall: ContractCall;
-}
-
-export interface EthersCall {
-  type: CallType;
-  methodName: string;
-}
-export interface ProviderCall extends EthersCall {
-  params: any[];
-}
-export interface ProviderCallWithId {
-  id: string;
-  providerCall: ProviderCall;
-}
-export interface EthersContractCall extends EthersCall {
-  contract: Contract;
-  contractCall: ContractCall;
-}
-export interface EthersContractCallWithId {
-  id: string;
-  call: EthersContractCall;
-}
-export type Logger = (errorLog: string) => any;
 
 export enum CallType {
   ETHERS_CONTRACT = 'ETHERS_CONTRACT',
@@ -55,27 +28,78 @@ export enum CallType {
   PROVIDER = 'PROVIDER',
 }
 
-export interface ConsoleErrorLogger {
-  logError(where: string, error: any, context?: any): void;
+export interface ContractCall {
+  contract: {
+    address: string;
+  };
+  name: string;
+  inputs: ParamType[];
+  outputs: ParamType[];
+  params: any[];
 }
-
-// tslint:disable:max-classes-per-file
-export class ContractCallError extends Error {
+export interface Call {
+  type: CallType;
+}
+export interface ProviderCall extends Call {
+  methodName: string;
+  params: any[];
+}
+export interface MultiContractCall extends Call {
   contractCall: ContractCall;
-  constructor() {
-    super('Contract call failed!');
+}
+export interface EthersContractCall extends MultiContractCall {
+  ethersContract: Contract;
+  contractCall: ContractCall;
+}
+export interface MultiContractCallWithId {
+  id: string;
+  multiCall: MultiContractCall;
+}
+export interface ProviderCallWithId {
+  id: string;
+  providerCall: ProviderCall;
+}
+export interface EthersContractCallWithId {
+  id: string;
+  ethersCall: EthersContractCall;
+}
+export type Logger = (errorLog: string) => any;
+
+
+export class MultiProviderError extends Error {
+  constructor(multicallProvider: MulticallProvider, call: Call) {
+    let errStr: string;
+    switch (call.type) {
+      case CallType.PROVIDER:
+        const pCall = call as ProviderCall;
+        errStr = `
+        Provider: ${multicallProvider.url}
+        Method: ${pCall.methodName}.(${pCall.params.join(', ')})`;
+        break;
+      case CallType.ETHERS_CONTRACT:
+        const eCall = call as EthersContractCall;
+        errStr = `
+        Provider: ${multicallProvider.url}
+        Contract: ${eCall.ethersContract.address}
+        Method: callStatic.${
+          eCall.contractCall.name
+        }(${eCall.contractCall.params.join(', ')})`;
+        break;
+      case CallType.MULTI_CONTRACT:
+        const mCall = call as MultiContractCall;
+        errStr = `
+        Provider: ${multicallProvider.url}
+        Contract: ${mCall.contractCall.contract.address}
+        Method: ${mCall.contractCall.name}(${mCall.contractCall.params.join(
+          ', ',
+        )})`;
+        break;
+
+      default:
+        errStr = 'Unknown Error!';
+        break;
+    }
+
+    super(errStr);
   }
 }
-export class EthersCallError extends Error {
-  call: EthersCall;
-  constructor() {
-    super('Ethers call failed!');
-  }
-}
-export class ProviderCallError extends Error {
-  call: EthersCall;
-  constructor() {
-    super('Provider call failed!');
-  }
-}
-// tslint:enable:max-classes-per-file

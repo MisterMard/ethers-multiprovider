@@ -9,31 +9,37 @@ import {
   Filter,
   Log,
 } from '@ethersproject/abstract-provider';
-import { ContractCall } from 'ethers-multicall';
+import { ContractCall, setMulticallAddress } from 'ethers-multicall';
 import { v4 as uuid } from 'uuid';
 import {
-  ContractCallError,
   ResolvedCalls,
   MulticallProviderWithConf,
   MultiContractCallWithId,
   EthersContractCallWithId,
   Logger,
-  EthersProviderWithConf,
-  EthersCall,
-  EthersCallError,
+  Call,
   ProviderCallWithId,
   ProviderCall,
-  ProviderCallError,
   CallType,
   EthersContractCall,
+  OptionalConf,
+  ProviderConf,
+  MultiProviderError,
+  MultiContractCall,
 } from './types';
-import { getProvidersWithConfig, silentLogger, timeout } from './helpers';
+import {
+  fetchEthersProviderList,
+  silentLogger,
+  sortCalls,
+  timeout,
+} from './helpers';
 import EventEmitter from 'events';
 import { Network } from '@ethersproject/networks';
-import { BigNumber, BigNumberish, ethers } from 'ethers';
+import { BigNumber, BigNumberish } from 'ethers';
+import { Provider as MulticallProvider } from './provider';
 
 export class MultiProvider {
-  private _providers: MulticallProviderWithConf[];
+  private _providers: MulticallProviderWithConf[] = [];
   private _mpsInUse: MulticallProviderWithConf[] = []; // multiProviders in use
   private _emitter: EventEmitter;
   private pending: {
@@ -45,64 +51,103 @@ export class MultiProvider {
     provider: ProviderCallWithId[];
   } = { multi: { new: [], error: [] }, ethers: [], provider: [] };
   private resolvedCalls: ResolvedCalls = {};
-  private rejected: {
-    multi: { [id: string]: ContractCall };
-    ethers: { [id: string]: EthersCall };
-    provider: { [id: string]: EthersCall };
-  } = { multi: {}, ethers: {}, provider: {} };
-  private _logErrors: boolean;
+  private rejected: { [id: string]: MultiProviderError } = {};
   private _logger: Logger;
+  private _chainId: number;
+  private _conf: ProviderConf = { batchSize: 10, callsDelay: 2000 };
 
   constructor(
-    providersWithConf: (EthersProvider | EthersProviderWithConf)[],
     chainId: number,
+    globalConf: OptionalConf = { batchSize: 10, callsDelay: 2000 },
     logger: Logger = silentLogger,
   ) {
+    this._chainId = chainId;
     this._logger = logger;
-    this._providers = getProvidersWithConfig(providersWithConf, chainId);
+    this._conf = Object.assign(this._conf, globalConf);
+    if (this._conf.multicallAddress) {
+      setMulticallAddress(this._chainId, this._conf.multicallAddress);
+    }
     this._emitter = new EventEmitter();
   }
 
-  public async all(calls: (ContractCall | EthersCall)[]) {
-    const ids = await this.queueCallsAndWaitResolve(calls);
+  /**
+   * Propagates the MultiProvider instance with public providers listed on https://chainlist.org/
+   */
+  public async initDefault() {
+    const ethersProviders: EthersProvider[] = await fetchEthersProviderList(
+      this._chainId,
+    );
+    await Promise.all(
+      ethersProviders.map((provider) => this.addProvider(provider)),
+    );
+  }
+
+  public async addProvider(
+    provider: EthersProvider,
+    _conf: OptionalConf = this._conf,
+  ) {
+    const conf = Object.assign(this._conf, _conf);
+    if (conf.multicallAddress) {
+      setMulticallAddress(this._chainId, conf.multicallAddress);
+    }
+
+    const multicallProvider = new MulticallProvider(provider, this._chainId);
+    try {
+      await multicallProvider.init();
+    } catch (error) {
+      this._logger(`Provider: ${multicallProvider.url} is offline!\n` + error);
+      await multicallProvider.destroy();
+      return;
+    }
+    for (const p of this._providers) {
+      if (p.provider.url === multicallProvider.url) {
+        this._logger(`Provider: ${multicallProvider.url} already exist!`);
+        await multicallProvider.destroy();
+        return;
+      }
+    }
+    this._providers.push({ provider: multicallProvider, conf });
+  }
+
+  public async stop() {
+    for (const provider of this._providers) {
+      await provider.provider.destroy();
+    }
+  }
+
+  public async all(calls: (ContractCall | Call)[]) {
+    const ids = await this.queueCallsAndWaitResolve(sortCalls(calls));
 
     return Promise.all(ids.map((id) => this.getResponse(id)));
   }
-  public async allSettled(calls: (ContractCall | EthersCall)[]) {
-    const ids = await this.queueCallsAndWaitResolve(calls);
+  public async allSettled(calls: (ContractCall | Call)[]) {
+    const ids = await this.queueCallsAndWaitResolve(sortCalls(calls));
 
     return Promise.allSettled(ids.map((id) => this.getResponse(id)));
   }
   private getResponse(id: string): Promise<any> {
-    if (this.rejected.multi[id]) {
-      const err = new ContractCallError();
-      err.contractCall = this.rejected.multi[id];
-      return Promise.reject(err);
-    }
-    if (this.rejected.ethers[id]) {
-      const err = new EthersCallError();
-      err.call = this.rejected.ethers[id];
-      return Promise.reject(err);
-    }
-    if (this.rejected.provider[id]) {
-      const err = new ProviderCallError();
-      err.call = this.rejected.provider[id];
-      return Promise.reject(err);
+    if (this.rejected[id]) {
+      return Promise.reject(this.rejected[id]);
     }
 
     return this.resolvedCalls[id];
   }
-  private async queueCallsAndWaitResolve(calls: (ContractCall | EthersCall)[]) {
+  private async queueCallsAndWaitResolve(calls: Call[]) {
     const ids: string[] = [];
     const promises = calls.map((call) => {
       const id = uuid();
-      const callType = 'type' in call ? call.type : CallType.MULTI_CONTRACT;
-      switch (callType) {
+      switch (call.type) {
         case CallType.MULTI_CONTRACT:
-          this.pending.multi.new.push({ id, contractCall: call as ContractCall });
+          this.pending.multi.new.push({
+            id,
+            multiCall: call as MultiContractCall,
+          });
           break;
         case CallType.ETHERS_CONTRACT:
-          this.pending.ethers.push({ id, call: call as EthersContractCall });
+          this.pending.ethers.push({
+            id,
+            ethersCall: call as EthersContractCall,
+          });
           break;
         case CallType.PROVIDER:
           this.pending.provider.push({
@@ -129,10 +174,7 @@ export class MultiProvider {
       // Provider > ErroredMulticall > Etherscalls > Multicalls
       if (this.pending.provider.length) {
         const provider = this.getRandomProvider();
-        this.executeProviderWrapper(
-          provider,
-          this.pending.provider.shift(),
-        );
+        this.executeProviderWrapper(provider, this.pending.provider.shift());
       } else if (this.pending.multi.error.length) {
         const provider = this.getRandomProvider();
         this.resolveErroredCalls(provider, this.pending.multi.error.shift());
@@ -166,7 +208,10 @@ export class MultiProvider {
       );
       this.resolvedCalls[call.id] = res;
     } catch (error) {
-      this.rejected.provider[call.id] = call.providerCall;
+      this.rejected[call.id] = new MultiProviderError(
+        provider.provider,
+        call.providerCall,
+      );
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
@@ -178,13 +223,16 @@ export class MultiProvider {
     call: EthersContractCallWithId,
   ) {
     try {
-      const res = await call.call.contract.executeEthersCall(
-        call.call,
+      const res = await call.ethersCall.ethersContract.executeEthersCall(
+        call.ethersCall,
         provider.provider.ethersProvider,
       );
       this.resolvedCalls[call.id] = res;
     } catch (error) {
-      this.rejected.ethers[call.id] = call.call;
+      this.rejected[call.id] = new MultiProviderError(
+        provider.provider,
+        call.ethersCall,
+      );
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
@@ -221,8 +269,10 @@ export class MultiProvider {
       // CALL_EXCEPTION = a failed call in the batch or a dead provider
       if (error.code === 'CALL_EXCEPTION') {
         if (contractCalls.length === 1) {
-          this.rejected.multi[contractCalls[0].id] =
-            contractCalls[0].contractCall;
+          this.rejected[contractCalls[0].id] = new MultiProviderError(
+            provider.provider,
+            contractCalls[0].multiCall,
+          );
           this._emitter.emit(contractCalls[0].id);
         } else {
           this._logger(
@@ -241,7 +291,7 @@ export class MultiProvider {
     provider: MulticallProviderWithConf,
     callbacks: MultiContractCallWithId[],
   ) {
-    const calls = callbacks.map((c) => c.contractCall);
+    const calls = callbacks.map((c) => c.multiCall.contractCall);
     const responses = await provider.provider.all(calls);
     responses.forEach((res, i) => {
       this.resolvedCalls[callbacks[i].id] = res;
@@ -280,12 +330,6 @@ export class MultiProvider {
     return new Promise((_r) => {
       this._emitter.once(eventStr, _r);
     });
-  }
-
-  public async stop() {
-    for (const provider of this._providers) {
-      if (provider.provider.destroy) await provider.provider.destroy();
-    }
   }
 
   // EthersProvider methods
@@ -391,7 +435,7 @@ export class MultiProvider {
     return this._execute('lookupAddress', address);
   }
 
-  // Event Emitter (ish)
+  // @TODO Event Emitter (ish)
   // abstract on(eventName: EventType, listener: Listener): Provider;
   // abstract once(eventName: EventType, listener: Listener): Provider;
   // abstract emit(eventName: EventType, ...args: Array<any>): boolean

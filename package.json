@@ -1,6 +1,7 @@
 {
 	"name": "ethers-multiprovider",
-	"version": "0.0.1",
+	"version": "0.1.0",
+	"author": "MisterMard",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/jest": "^27.5.1",
@@ -28,6 +29,7 @@
 		"/lib"
 	],
 	"dependencies": {
+		"cross-fetch": "^3.1.5",
 		"ethers": "^5.6.2",
 		"ethers-multicall": "^0.2.2",
 		"uuid": "^8.3.2"

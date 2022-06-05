@@ -69,10 +69,6 @@ export class Contract extends MultiContract {
         const filters = uniqueFilters[name];
         if (filters.length === 1) {
           defineReadOnly(this.filters, name, this.filters[filters[0]]);
-        } else {
-          console.warn(
-            `Duplicate definition of ${name} (${filters.join(', ')})`,
-          );
         }
       });
     }
@@ -96,15 +92,14 @@ export class Contract extends MultiContract {
     }
     const contractCall: ContractCall = {
       contract: { address: this.address },
-      name: '',
+      name: 'queryFilter',
       inputs: [],
       outputs: [],
       params: [event, fromBlockOrBlockhash, toBlock],
     };
     const ethersCall: EthersContractCall = {
       type: CallType.ETHERS_CONTRACT,
-      methodName: 'queryFilter',
-      contract: this,
+      ethersContract: this,
       contractCall,
     };
     return this._multiProvider.all([ethersCall]);
@@ -130,13 +125,13 @@ export class Contract extends MultiContract {
       this._interface,
       provider,
     );
-    return contract.callStatic[ethersCall.methodName](
+    return contract.callStatic[ethersCall.contractCall.name](
       ...ethersCall.contractCall.params,
     );
   }
 
   executeEthersCall(ethersCall: EthersContractCall, provider: EthersProvider) {
-    switch (ethersCall.methodName) {
+    switch (ethersCall.contractCall.name) {
       case 'queryFilter':
         return this._queryFilter(provider, ethersCall);
 
@@ -163,7 +158,8 @@ function makeCallStaticFunction(
     const { address } = multiContract;
     const { inputs } = multiContract.functions.find((f) => f.name === name);
     const { outputs } = multiContract.functions.find((f) => f.name === name);
-    const contractCall = {
+    const contractCall: ContractCall = {
+
       contract: {
         address,
       },
@@ -174,8 +170,7 @@ function makeCallStaticFunction(
     };
     const ethersCall: EthersContractCall = {
       type: CallType.ETHERS_CONTRACT,
-      methodName: name,
-      contract: multiContract,
+      ethersContract: multiContract,
       contractCall,
     };
     return multiContract.multiProvider.all([ethersCall]).then((x) => x[0]);
