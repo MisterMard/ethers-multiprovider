@@ -8,9 +8,9 @@ import {
   TransactionReceipt,
   Filter,
   Log,
-} from '@ethersproject/abstract-provider';
-import { ContractCall, setMulticallAddress } from 'ethers-multicall';
-import { v4 as uuid } from 'uuid';
+} from "@ethersproject/abstract-provider";
+import { ContractCall, setMulticallAddress } from "ethers-multicall";
+import { v4 as uuid } from "uuid";
 import {
   ResolvedCalls,
   MulticallProviderWithConf,
@@ -26,18 +26,21 @@ import {
   ProviderConf,
   MultiProviderError,
   MultiContractCall,
-} from './types';
+} from "./types";
 import {
   fetchEthersProviderList,
   fulfillWithTimeLimit,
+  isDeadRPC,
+  isTimeoutError,
   silentLogger,
   sortCalls,
+  stripError,
   timeout,
-} from './helpers';
-import EventEmitter from 'events';
-import { Network } from '@ethersproject/networks';
-import { BigNumber, BigNumberish } from 'ethers';
-import { Provider as MulticallProvider } from './provider';
+} from "./helpers";
+import EventEmitter from "events";
+import { Network } from "@ethersproject/networks";
+import { BigNumber, BigNumberish } from "ethers";
+import { Provider as MulticallProvider } from "./provider";
 
 export class MultiProvider {
   private _providers: MulticallProviderWithConf[] = [];
@@ -93,9 +96,13 @@ export class MultiProvider {
     }
 
     const multicallProvider = new MulticallProvider(provider, this._chainId);
-    const bound = multicallProvider.init.bind(multicallProvider)
+    const bound = multicallProvider.init.bind(multicallProvider);
     try {
-      await fulfillWithTimeLimit(4000,"Provider took too long to respond.", bound);
+      await fulfillWithTimeLimit(
+        3000,
+        "Provider took too long to respond.",
+        bound,
+      );
     } catch (error) {
       this._logger(`Provider: ${multicallProvider.url} is offline!\n` + error);
       await multicallProvider.destroy();
@@ -159,7 +166,7 @@ export class MultiProvider {
           break;
 
         default:
-          throw new Error('Undetermined callType');
+          throw new Error("Undetermined callType");
       }
       ids.push(id);
       return this.awaitEventOnce(id);
@@ -192,7 +199,7 @@ export class MultiProvider {
         ) {
           callbacksBatch.push(this.pending.multi.new.shift());
         }
-        this.executeWrapper(provider, callbacksBatch);
+        this.executeMulticallWrapper(provider, callbacksBatch);
       } else return;
 
       this.runNext();
@@ -209,11 +216,29 @@ export class MultiProvider {
         ...call.providerCall.params,
       );
       this.resolvedCalls[call.id] = res;
-    } catch (error) {
-      this.rejected[call.id] = new MultiProviderError(
-        provider.provider,
-        call.providerCall,
-      );
+    } catch (error: any) {
+      const err = stripError(error);
+      // Catch provider errors and remove any problematic provider/increase callsDelay/lower batchSize
+      // Timeout (set a timeout of 5s and increase the delay by 20%)
+      if (isTimeoutError(err)) {
+        this._logger(
+          `Provider: ${provider.provider.url} timedout for 5s\nCurrent callsDelay: ${provider.conf.callsDelay}`,
+        );
+        provider.timeout = Date.now();
+        provider.conf.callsDelay *= 1.2;
+        this.pending.provider.push(call);
+      } else if (isDeadRPC(err)) {
+        this._logger(`Provider: ${provider.provider.url} is offline\n${error}`);
+        this.removeProvider(provider);
+        this.pending.provider.push(call);
+      } else {
+        this.rejected[call.id] = new MultiProviderError(
+          provider.provider,
+          call.providerCall,
+          error.code,
+          error.reason,
+        );
+      }
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
@@ -230,11 +255,29 @@ export class MultiProvider {
         provider.provider.ethersProvider,
       );
       this.resolvedCalls[call.id] = res;
-    } catch (error) {
-      this.rejected[call.id] = new MultiProviderError(
-        provider.provider,
-        call.ethersCall,
-      );
+    } catch (error: any) {
+      const err = stripError(error);
+      // Catch provider errors and remove any problematic provider/increase callsDelay/lower batchSize
+      // Timeout (set a timeout of 5s and increase the delay by 20%)
+      if (isTimeoutError(err)) {
+        this._logger(
+          `Provider: ${provider.provider.url} timedout for 5s\nCurrent callsDelay: ${provider.conf.callsDelay}`,
+        );
+        provider.timeout = Date.now();
+        provider.conf.callsDelay *= 1.2;
+        this.pending.ethers.push(call);
+      } else if (isDeadRPC(err)) {
+        this._logger(`Provider: ${provider.provider.url} is offline\n${error}`);
+        this.removeProvider(provider);
+        this.pending.ethers.push(call);
+      } else {
+        this.rejected[call.id] = new MultiProviderError(
+          provider.provider,
+          call.ethersCall,
+          error.code,
+          error.reason,
+        );
+      }
     } finally {
       this._emitter.emit(call.id);
       await this.freeProvider(provider);
@@ -257,40 +300,53 @@ export class MultiProvider {
     // put excess calls back to pending
     if (erroredCalls.length) this.pending.multi.error.push(erroredCalls);
 
-    this.executeWrapper(provider, callsForCurrentProvider);
+    this.executeMulticallWrapper(provider, callsForCurrentProvider);
   }
 
-  private async executeWrapper(
+  private async executeMulticallWrapper(
     provider: MulticallProviderWithConf,
     contractCalls: MultiContractCallWithId[],
   ) {
     try {
-      await this.execute(provider, contractCalls);
+      await this.executeMulticall(provider, contractCalls);
       contractCalls.forEach((c) => this._emitter.emit(c.id));
     } catch (error: any) {
-      // CALL_EXCEPTION = a failed call in the batch or a dead provider
-      if (error.code === 'CALL_EXCEPTION') {
+      const err = stripError(error);
+      // Catch provider errors and remove any problematic provider/increase callsDelay/lower batchSize
+      // Timeout (set a timeout of 5s and increase the delay by 20%)
+      if (isTimeoutError(err)) {
+        this._logger(
+          `Provider: ${provider.provider.url} timedout for 5s\nCurrent callsDelay: ${provider.conf.callsDelay}`,
+        );
+        provider.timeout = Date.now();
+        provider.conf.callsDelay *= 1.2;
+        this.pending.multi.new.push(...contractCalls);
+      } else if (isDeadRPC(err)) {
+        this._logger(`Provider: ${provider.provider.url} is offline\n${error}`);
+        this.removeProvider(provider);
+        this.pending.multi.new.push(...contractCalls);
+      } else {
         if (contractCalls.length === 1) {
           this.rejected[contractCalls[0].id] = new MultiProviderError(
             provider.provider,
             contractCalls[0].multiCall,
+            error.code,
+            error.reason,
           );
           this._emitter.emit(contractCalls[0].id);
         } else {
           this._logger(
-            `Error: A call or more in a multicall batch of ${contractCalls.length} calls resulted in an exception. Retrying...`+
-            `\nProvider: ${provider.provider.url}`,
+            `Error: A call or more in a multicall batch of ${contractCalls.length} calls resulted in an exception. Retrying...` +
+              `\nProvider: ${provider.provider.url}`,
           );
           this.handleErroredCalls(contractCalls);
         }
-      } else {
-        throw error;
       }
     } finally {
       await this.freeProvider(provider);
     }
   }
-  private async execute(
+  private async executeMulticall(
     provider: MulticallProviderWithConf,
     callbacks: MultiContractCallWithId[],
   ) {
@@ -324,9 +380,20 @@ export class MultiProvider {
   // frees the provider in use, emits a run to clear pending callbacks
   private async freeProvider(prov: MulticallProviderWithConf) {
     const index = this._mpsInUse.findIndex((x) => x === prov);
+    if (prov.timeout) {
+      const delta = Date.now() - prov.timeout;
+      await timeout(delta);
+      delete prov.timeout;
+    } else {
+      await timeout(prov.conf.callsDelay);
+    }
     this._mpsInUse.splice(index, 1);
-    await timeout(prov.conf.callsDelay);
     this.runNext();
+  }
+
+  private removeProvider(prov: MulticallProviderWithConf) {
+    const index = this._providers.findIndex((x) => x === prov);
+    this._providers.splice(index, 1);
   }
 
   private awaitEventOnce(eventStr: string) {
@@ -347,18 +414,18 @@ export class MultiProvider {
   }
   // Network
   getNetwork(): Promise<Network> {
-    return this._execute('getNetwork');
+    return this._execute("getNetwork");
   }
 
   // Latest State
   getBlockNumber(): Promise<number> {
-    return this._execute('getBlockNumber');
+    return this._execute("getBlockNumber");
   }
   getGasPrice(): Promise<BigNumber> {
-    return this._execute('getGasPrice');
+    return this._execute("getGasPrice");
   }
   getFeeData(): Promise<FeeData> {
-    return this._execute('getFeeData');
+    return this._execute("getFeeData");
   }
 
   // Account
@@ -366,26 +433,26 @@ export class MultiProvider {
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<BigNumber> {
-    return this._execute('getBalance', addressOrName, blockTag);
+    return this._execute("getBalance", addressOrName, blockTag);
   }
   getTransactionCount(
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<number> {
-    return this._execute('getTransactionCount', addressOrName, blockTag);
+    return this._execute("getTransactionCount", addressOrName, blockTag);
   }
   getCode(
     addressOrName: string | Promise<string>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<string> {
-    return this._execute('getCode', addressOrName, blockTag);
+    return this._execute("getCode", addressOrName, blockTag);
   }
   getStorageAt(
     addressOrName: string | Promise<string>,
     position: BigNumberish | Promise<BigNumberish>,
     blockTag?: BlockTag | Promise<BlockTag>,
   ): Promise<string> {
-    return this._execute('getStorageAt', addressOrName, position, blockTag);
+    return this._execute("getStorageAt", addressOrName, position, blockTag);
   }
 
   // @TODO Execution methods require a Signer object
@@ -411,31 +478,31 @@ export class MultiProvider {
   getBlock(
     blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
   ): Promise<Block> {
-    return this._execute('getBlock', blockHashOrBlockTag);
+    return this._execute("getBlock", blockHashOrBlockTag);
   }
   getBlockWithTransactions(
     blockHashOrBlockTag: BlockTag | string | Promise<BlockTag | string>,
   ): Promise<BlockWithTransactions> {
-    return this._execute('getBlockWithTransactions', blockHashOrBlockTag);
+    return this._execute("getBlockWithTransactions", blockHashOrBlockTag);
   }
   getTransaction(transactionHash: string): Promise<TransactionResponse> {
-    return this._execute('getTransaction', transactionHash);
+    return this._execute("getTransaction", transactionHash);
   }
   getTransactionReceipt(transactionHash: string): Promise<TransactionReceipt> {
-    return this._execute('getTransactionReceipt', transactionHash);
+    return this._execute("getTransactionReceipt", transactionHash);
   }
 
   // Bloom-filter Queries
   getLogs(filter: Filter): Promise<Array<Log>> {
-    return this._execute('getLogs', filter);
+    return this._execute("getLogs", filter);
   }
 
   // ENS
   resolveName(name: string | Promise<string>): Promise<null | string> {
-    return this._execute('resolveName', name);
+    return this._execute("resolveName", name);
   }
   lookupAddress(address: string | Promise<string>): Promise<null | string> {
-    return this._execute('lookupAddress', address);
+    return this._execute("lookupAddress", address);
   }
 
   // @TODO Event Emitter (ish)
@@ -463,7 +530,7 @@ export class MultiProvider {
     timeout?: number,
   ): Promise<TransactionReceipt> {
     return this._execute(
-      'waitForTransaction',
+      "waitForTransaction",
       transactionHash,
       confirmations,
       timeout,

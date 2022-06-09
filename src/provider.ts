@@ -1,6 +1,6 @@
-import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
-import { JsonRpcProvider, WebSocketProvider } from '@ethersproject/providers';
-import { Provider as MulticallProvider } from 'ethers-multicall';
+import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
+import { JsonRpcProvider, WebSocketProvider } from "@ethersproject/providers";
+import { Provider as MulticallProvider } from "ethers-multicall";
 
 export class Provider extends MulticallProvider {
   url: string;
@@ -12,7 +12,8 @@ export class Provider extends MulticallProvider {
     this.ethersProvider = provider;
     this._chainId = chainId;
     this.destroy = () => {
-      if (this.ethersProvider instanceof WebSocketProvider) return this.ethersProvider.destroy();
+      if (this.ethersProvider instanceof WebSocketProvider)
+        return this.ethersProvider.destroy();
       return;
     };
     if (provider instanceof JsonRpcProvider) {
@@ -24,10 +25,14 @@ export class Provider extends MulticallProvider {
   }
 
   async init(): Promise<void> {
-    const { chainId } = await this.ethersProvider.getNetwork();
-    await this.ethersProvider.getBlockNumber();
+    const [chainId] = await Promise.all([
+      this.ethersProvider.getNetwork().then((x) => x.chainId),
+      this.ethersProvider.getBlockNumber(),
+    ]);
     if (chainId !== this._chainId) {
-      throw new Error(`Provider: ${this.url} is not for chain [${this._chainId}]!`);
+      throw new Error(
+        `Provider: ${this.url} is not for chain [${this._chainId}]!`,
+      );
     }
   }
 

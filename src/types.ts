@@ -1,7 +1,7 @@
 // import { ContractCall } from 'ethers-multicall';
-import { Provider as MulticallProvider } from './provider';
-import { Contract } from './contract';
-import { ParamType } from '@ethersproject/abi';
+import { Provider as MulticallProvider } from "./provider";
+import { Contract } from "./contract";
+import { ParamType } from "@ethersproject/abi";
 
 // Interfaces & Types
 export interface ResolvedCalls {
@@ -15,6 +15,7 @@ export interface ProviderConf {
 export interface MulticallProviderWithConf {
   provider: MulticallProvider;
   conf: ProviderConf;
+  timeout?: number;
 }
 export interface OptionalConf {
   callsDelay?: number;
@@ -23,9 +24,9 @@ export interface OptionalConf {
 }
 
 export enum CallType {
-  ETHERS_CONTRACT = 'ETHERS_CONTRACT',
-  MULTI_CONTRACT = 'MULTI_CONTRACT',
-  PROVIDER = 'PROVIDER',
+  ETHERS_CONTRACT = "ETHERS_CONTRACT",
+  MULTI_CONTRACT = "MULTI_CONTRACT",
+  PROVIDER = "PROVIDER",
 }
 
 export interface ContractCall {
@@ -65,16 +66,22 @@ export interface EthersContractCallWithId {
 }
 export type Logger = (errorLog: string) => any;
 
-
 export class MultiProviderError extends Error {
-  constructor(multicallProvider: MulticallProvider, call: Call) {
+  constructor(
+    multicallProvider: MulticallProvider,
+    call: Call,
+    code: string,
+    reason: string,
+  ) {
     let errStr: string;
     switch (call.type) {
       case CallType.PROVIDER:
         const pCall = call as ProviderCall;
         errStr = `
         Provider: ${multicallProvider.url}
-        Method: ${pCall.methodName}(${pCall.params.join(', ')})`;
+        Method: ${pCall.methodName}(${pCall.params.join(", ")})
+        Code: ${code}
+        Reason: ${reason}`;
         break;
       case CallType.ETHERS_CONTRACT:
         const eCall = call as EthersContractCall;
@@ -83,7 +90,9 @@ export class MultiProviderError extends Error {
         Contract: ${eCall.ethersContract.address}
         Method: callStatic.${
           eCall.contractCall.name
-        }(${eCall.contractCall.params.join(', ')})`;
+        }(${eCall.contractCall.params.join(", ")})
+        Code: ${code}
+        Reason: ${reason}`;
         break;
       case CallType.MULTI_CONTRACT:
         const mCall = call as MultiContractCall;
@@ -91,12 +100,14 @@ export class MultiProviderError extends Error {
         Provider: ${multicallProvider.url}
         Contract: ${mCall.contractCall.contract.address}
         Method: ${mCall.contractCall.name}(${mCall.contractCall.params.join(
-          ', ',
-        )})`;
+          ", ",
+        )})
+        Code: ${code}
+        Reason: ${reason}`;
         break;
 
       default:
-        errStr = 'Unknown Error!';
+        errStr = "Unknown Error!";
         break;
     }
 

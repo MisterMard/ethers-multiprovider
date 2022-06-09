@@ -112,5 +112,27 @@ export async function fulfillWithTimeLimit(
   return response;
 }
 
+export function isTimeoutError(err: any) {
+  if (
+    err.code === "SERVER_ERROR" &&
+    err.error &&
+    err.error.message &&
+    err.error.message === "execution aborted (timeout = 5s)"
+  )
+    return true;
+  return false;
+}
+export function isDeadRPC(err: any) {
+  if (err.code === "SERVER_ERROR" && err.status && err.status === 502)
+    return true;
+  if (err.code === "NETWORK_ERROR" && err.event && err.event === "noNetwork")
+    return true;
+  return false;
+}
+export function stripError(err: any) {
+  if (err.code === "SERVER_ERROR") return err;
+  return err.error ?? err;
+}
+
 // tslint:disable-next-line
 export function silentLogger(_msg: string) {}
