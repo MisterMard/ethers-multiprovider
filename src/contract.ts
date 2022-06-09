@@ -1,15 +1,15 @@
-import { Fragment, Interface, JsonFragment } from "@ethersproject/abi";
-import { Contract as MultiContract, ContractCall } from "ethers-multicall";
-import { BlockTag } from "@ethersproject/abstract-provider";
+import { Fragment, Interface, JsonFragment } from '@ethersproject/abi';
+import { Contract as MultiContract, ContractCall } from 'ethers-multicall';
+import { BlockTag } from '@ethersproject/abstract-provider';
 import {
   Event,
   EventFilter,
   Contract as EthersContract,
-} from "@ethersproject/contracts";
-import { EventFragment } from "ethers/lib/utils";
-import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
-import { MultiProvider } from "./multi-provider";
-import { CallType, EthersContractCall } from "./types";
+} from '@ethersproject/contracts';
+import { EventFragment } from 'ethers/lib/utils';
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
+import { MultiProvider } from './multi-provider';
+import { CallType, EthersContractCall } from './types';
 
 export class Contract extends MultiContract {
   private _filters: { [name: string]: (...args: Array<any>) => EventFilter } =
@@ -43,7 +43,7 @@ export class Contract extends MultiContract {
     this._multiProvider = multiProvider;
 
     this._eventFragments = fragments
-      .filter((x: { type: string }) => x.type === "event")
+      .filter((x: { type: string }) => x.type === 'event')
       .map((x) => EventFragment.from(x));
 
     // Save the contract interface
@@ -89,11 +89,11 @@ export class Contract extends MultiContract {
     toBlock?: BlockTag,
   ) {
     if (!this._multiProvider) {
-      throw new Error("No MultiProvider were supplied!");
+      throw new Error('No MultiProvider were supplied!');
     }
     const contractCall: ContractCall = {
       contract: { address: this.address },
-      name: "queryFilter",
+      name: 'queryFilter',
       inputs: [],
       outputs: [],
       params: [event, fromBlockOrBlockhash, toBlock],
@@ -133,7 +133,7 @@ export class Contract extends MultiContract {
 
   executeEthersCall(ethersCall: EthersContractCall, provider: EthersProvider) {
     switch (ethersCall.contractCall.name) {
-      case "queryFilter":
+      case 'queryFilter':
         return this._queryFilter(provider, ethersCall);
 
       default:
@@ -157,7 +157,7 @@ function makeCallStaticFunction(
 ): (...args: Array<any>) => Promise<any> {
   return (...params: any[]) => {
     if (!multiContract.multiProvider) {
-      throw new Error("No MultiProvider were supplied!");
+      throw new Error('No MultiProvider were supplied!');
     }
     const { address } = multiContract;
     const { inputs } = multiContract.functions.find((f) => f.name === name);

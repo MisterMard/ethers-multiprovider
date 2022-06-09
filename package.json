@@ -1,6 +1,6 @@
 {
 	"name": "ethers-multiprovider",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"author": "MisterMard",
 	"license": "MIT",
 	"devDependencies": {
@@ -20,7 +20,7 @@
 		"lint": "tslint -c tslint.json '{src,tests}/**/*.ts' --fix",
 		"prepublishOnly": "yarn build && yarn test && yarn lint",
 		"build": "npm run clean && npm run compile",
-		"clean": "rm -rf out || rmdir out /s /q",
+		"clean": "rm -rf lib || rmdir lib /s /q",
 		"compile": "tsc -p ."
 	},
 	"main": "lib/index.js",

@@ -1,6 +1,6 @@
-import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
-import { JsonRpcProvider, WebSocketProvider } from "@ethersproject/providers";
-import { Provider as MulticallProvider } from "ethers-multicall";
+import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
+import { JsonRpcProvider, WebSocketProvider } from '@ethersproject/providers';
+import { Provider as MulticallProvider } from 'ethers-multicall';
 
 export class Provider extends MulticallProvider {
   url: string;
@@ -12,8 +12,9 @@ export class Provider extends MulticallProvider {
     this.ethersProvider = provider;
     this._chainId = chainId;
     this.destroy = () => {
-      if (this.ethersProvider instanceof WebSocketProvider)
+      if (this.ethersProvider instanceof WebSocketProvider) {
         return this.ethersProvider.destroy();
+      }
       return;
     };
     if (provider instanceof JsonRpcProvider) {
