@@ -74,7 +74,7 @@ export class MultiProviderError extends Error {
         const pCall = call as ProviderCall;
         errStr = `
         Provider: ${multicallProvider.url}
-        Method: ${pCall.methodName}.(${pCall.params.join(', ')})`;
+        Method: ${pCall.methodName}(${pCall.params.join(', ')})`;
         break;
       case CallType.ETHERS_CONTRACT:
         const eCall = call as EthersContractCall;
