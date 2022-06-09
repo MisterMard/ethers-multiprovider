@@ -29,6 +29,7 @@ import {
 } from './types';
 import {
   fetchEthersProviderList,
+  fulfillWithTimeLimit,
   silentLogger,
   sortCalls,
   timeout,
@@ -92,8 +93,9 @@ export class MultiProvider {
     }
 
     const multicallProvider = new MulticallProvider(provider, this._chainId);
+    const bound = multicallProvider.init.bind(multicallProvider)
     try {
-      await multicallProvider.init();
+      await fulfillWithTimeLimit(4000,"Provider took too long to respond.", bound);
     } catch (error) {
       this._logger(`Provider: ${multicallProvider.url} is offline!\n` + error);
       await multicallProvider.destroy();
@@ -276,7 +278,8 @@ export class MultiProvider {
           this._emitter.emit(contractCalls[0].id);
         } else {
           this._logger(
-            `Error: A call or more in a multicall batch of ${contractCalls.length} calls resulted in an exception. Retrying...`,
+            `Error: A call or more in a multicall batch of ${contractCalls.length} calls resulted in an exception. Retrying...`+
+            `\nProvider: ${provider.provider.url}`,
           );
           this.handleErroredCalls(contractCalls);
         }

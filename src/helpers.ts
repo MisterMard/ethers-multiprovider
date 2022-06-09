@@ -1,31 +1,30 @@
-import { ContractCall, Call, MultiContractCall, CallType } from './types';
-import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
-import fetch from 'cross-fetch';
-import { ethers } from 'ethers';
-
+import { ContractCall, Call, MultiContractCall, CallType } from "./types";
+import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
+import fetch from "cross-fetch";
+import { ethers } from "ethers";
 
 export async function fetchEthersProviderList(
   chainId: number,
 ): Promise<EthersProvider[]> {
   const formatRpcUrl = (url: string) => {
     if (
-      !(url.startsWith('https') || url.startsWith('wss')) ||
-      url.includes('$')
+      !(url.startsWith("https") || url.startsWith("wss")) ||
+      url.includes("$")
     ) {
       return;
     }
-    if (url.lastIndexOf('/') === url.length - 1) {
+    if (url.lastIndexOf("/") === url.length - 1) {
       return url.substring(0, url.length - 1);
     }
     return url;
   };
 
   // Fetch RPC urls
-  const rawRpcList: any[] = await fetch('https://chainid.network/chains.json')
+  const rawRpcList: any[] = await fetch("https://chainid.network/chains.json")
     .then((x) => x.json())
     .catch(() => []);
   const rawRpcObject = await fetch(
-    'https://raw.githubusercontent.com/DefiLlama/chainlist/main/constants/extraRpcs.json',
+    "https://raw.githubusercontent.com/DefiLlama/chainlist/main/constants/extraRpcs.json",
   )
     .then((x) => x.json())
     // tslint:disable-next-line
@@ -67,7 +66,7 @@ export async function fetchEthersProviderList(
   const ethersProviderList: EthersProvider[] = [];
   if (filtered[chainId]) {
     filtered[chainId].map((rpc) => {
-      if (rpc.startsWith('wss')) {
+      if (rpc.startsWith("wss")) {
         const ethersProvider = new ethers.providers.WebSocketProvider(rpc);
         ethersProviderList.push(ethersProvider);
       } else {
@@ -81,7 +80,7 @@ export async function fetchEthersProviderList(
 
 export function sortCalls(calls: (ContractCall | Call)[]) {
   return calls.map((call) => {
-    if ('type' in call) return call;
+    if ("type" in call) return call;
     return {
       type: CallType.MULTI_CONTRACT,
       contractCall: call,
@@ -91,6 +90,26 @@ export function sortCalls(calls: (ContractCall | Call)[]) {
 
 export function timeout(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+export async function fulfillWithTimeLimit(
+  timeLimit: number,
+  failReason: string,
+  task: (...args: any[]) => any,
+  ...args: any[]
+): Promise<any> {
+  let timeout: NodeJS.Timeout;
+  const timeoutPromise = new Promise((_, _reject) => {
+    timeout = setTimeout(() => {
+      _reject(failReason);
+    }, timeLimit);
+  });
+  const taskPromise: Promise<any> = task(...args);
+  const response = await Promise.race([taskPromise, timeoutPromise]);
+  if (timeout) {
+    clearTimeout(timeout);
+  }
+  return response;
 }
 
 // tslint:disable-next-line
