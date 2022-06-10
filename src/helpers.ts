@@ -1,30 +1,30 @@
-import { ContractCall, Call, MultiContractCall, CallType } from './types';
-import { Provider as EthersProvider } from '@ethersproject/abstract-provider';
-import fetch from 'cross-fetch';
-import { ethers } from 'ethers';
+import { ContractCall, Call, MultiContractCall, CallType } from "./types";
+import { Provider as EthersProvider } from "@ethersproject/abstract-provider";
+import fetch from "cross-fetch";
+import { ethers } from "ethers";
 
 export async function fetchEthersProviderList(
   chainId: number,
 ): Promise<EthersProvider[]> {
   const formatRpcUrl = (url: string) => {
     if (
-      !(url.startsWith('https') || url.startsWith('wss')) ||
-      url.includes('$')
+      !(url.startsWith("https") || url.startsWith("wss")) ||
+      url.includes("$")
     ) {
       return;
     }
-    if (url.lastIndexOf('/') === url.length - 1) {
+    if (url.lastIndexOf("/") === url.length - 1) {
       return url.substring(0, url.length - 1);
     }
     return url;
   };
 
   // Fetch RPC urls
-  const rawRpcList: any[] = await fetch('https://chainid.network/chains.json')
+  const rawRpcList: any[] = await fetch("https://chainid.network/chains.json")
     .then((x) => x.json())
     .catch(() => []);
   const rawRpcObject = await fetch(
-    'https://raw.githubusercontent.com/DefiLlama/chainlist/main/constants/extraRpcs.json',
+    "https://raw.githubusercontent.com/DefiLlama/chainlist/main/constants/extraRpcs.json",
   )
     .then((x) => x.json())
     // tslint:disable-next-line
@@ -66,7 +66,7 @@ export async function fetchEthersProviderList(
   const ethersProviderList: EthersProvider[] = [];
   if (filtered[chainId]) {
     filtered[chainId].map((rpc) => {
-      if (rpc.startsWith('wss')) {
+      if (rpc.startsWith("wss")) {
         const ethersProvider = new ethers.providers.WebSocketProvider(rpc);
         ethersProviderList.push(ethersProvider);
       } else {
@@ -80,7 +80,7 @@ export async function fetchEthersProviderList(
 
 export function sortCalls(calls: (ContractCall | Call)[]) {
   return calls.map((call) => {
-    if ('type' in call) return call;
+    if ("type" in call) return call;
     return {
       type: CallType.MULTI_CONTRACT,
       contractCall: call,
@@ -114,26 +114,35 @@ export async function fulfillWithTimeLimit(
 
 export function isTimeoutError(err: any) {
   if (
-    err.code === 'SERVER_ERROR' &&
+    err.code === "SERVER_ERROR" &&
     err.error &&
     err.error.message &&
-    err.error.message === 'execution aborted (timeout = 5s)'
+    err.error.message === "execution aborted (timeout = 5s)"
   ) {
     return true;
   }
   return false;
 }
 export function isDeadRPC(err: any) {
-  if (err.code === 'SERVER_ERROR' && err.status && err.status === 502) {
+  if (err.code === "SERVER_ERROR" && err.status && err.status === 502) {
     return true;
   }
-  if (err.code === 'NETWORK_ERROR' && err.event && err.event === 'noNetwork') {
+  if (err.code === "NETWORK_ERROR" && err.event && err.event === "noNetwork") {
     return true;
   }
   return false;
 }
+export function isFlakyRPC(err: any) {
+  if (
+    err.code === "SERVER_ERROR" &&
+    err.serverError &&
+    err.serverError.code === "ECONNRESET"
+  )
+    return true;
+  return false;
+}
 export function stripError(err: any) {
-  if (err.code === 'SERVER_ERROR') return err;
+  if (err.code === "SERVER_ERROR") return err;
   return err.error ?? err;
 }
 
