@@ -100,7 +100,7 @@ export class MultiProvider {
     const bound = multicallProvider.init.bind(multicallProvider);
     try {
       await fulfillWithTimeLimit(
-        3000,
+        4000,
         'Provider took too long to respond.',
         bound,
       );
@@ -180,7 +180,7 @@ export class MultiProvider {
   }
 
   private runNext() {
-    if (this._mpsInUse.length !== this._providers.length) {
+    if (this._mpsInUse.length < this._providers.length) {
       // Provider > ErroredMulticall > Etherscalls > Multicalls
       if (this.pending.provider.length) {
         const provider = this.getRandomProvider();
@@ -344,8 +344,7 @@ export class MultiProvider {
           this.rejected[callOrCalls[0].id] = new MultiProviderError(
             provider.provider,
             callOrCalls[0].multiCall,
-            err.code,
-            err.reason,
+            err
           );
           this._emitter.emit(callOrCalls[0].id);
         } else {
@@ -361,8 +360,7 @@ export class MultiProvider {
           'ethersCall' in callOrCalls
             ? callOrCalls.ethersCall
             : callOrCalls.providerCall,
-          err.code,
-          err.reason,
+          err
         );
         this._emitter.emit(callOrCalls.id);
       }

@@ -70,17 +70,17 @@ export class MultiProviderError extends Error {
   constructor(
     multicallProvider: MulticallProvider,
     call: Call,
-    code: string,
-    reason: string,
+    error: any,
   ) {
     let errStr: string;
+    const reason = error.reason ?? error.message;
     switch (call.type) {
       case CallType.PROVIDER:
         const pCall = call as ProviderCall;
         errStr = `
         Provider: ${multicallProvider.url}
         Method: ${pCall.methodName}(${pCall.params.join(', ')})
-        Code: ${code}
+        Code: ${error.code}
         Reason: ${reason}`;
         break;
       case CallType.ETHERS_CONTRACT:
@@ -91,7 +91,7 @@ export class MultiProviderError extends Error {
         Method: callStatic.${
           eCall.contractCall.name
         }(${eCall.contractCall.params.join(', ')})
-        Code: ${code}
+        Code: ${error.code}
         Reason: ${reason}`;
         break;
       case CallType.MULTI_CONTRACT:
@@ -102,7 +102,7 @@ export class MultiProviderError extends Error {
         Method: ${mCall.contractCall.name}(${mCall.contractCall.params.join(
           ', ',
         )})
-        Code: ${code}
+        Code: ${error.code}
         Reason: ${reason}`;
         break;
 
